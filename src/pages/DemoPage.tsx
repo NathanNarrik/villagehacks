@@ -88,7 +88,7 @@ const DemoPage = () => {
           <Badge className="bg-accent text-accent-foreground rounded-pill px-4 py-1 text-sm font-semibold">
             37% fewer medical term errors
           </Badge>
-          <Button variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 rounded-pill text-sm"
+          <Button className="border border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 rounded-pill text-sm"
             onClick={() => setShowClipsModal(true)}>
             Demo Clips
           </Button>

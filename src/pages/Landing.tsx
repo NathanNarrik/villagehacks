@@ -29,7 +29,7 @@ const Landing = () => {
               <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 rounded-pill px-8 py-3 text-base font-semibold">
                 <Link to="/demo">Try the Demo <ArrowRight className="ml-2 h-4 w-4" /></Link>
               </Button>
-              <Button asChild variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 rounded-pill px-8 py-3 text-base">
+              <Button asChild className="border border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 rounded-pill px-8 py-3 text-base">
                 <Link to="/benchmark">See Benchmark Results</Link>
               </Button>
             </div>
