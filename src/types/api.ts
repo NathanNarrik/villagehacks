@@ -1,11 +1,14 @@
 // Types matching the FastAPI backend contract
 
+export type ConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
+
 export interface RawWord {
   word: string;
   start_ms: number;
   end_ms: number;
   speaker: "Doctor" | "Patient";
-  uncertain: boolean;
+  confidence: ConfidenceLevel;
+  uncertainty_signals?: string[];
 }
 
 export interface CorrectedWord {
@@ -33,7 +36,9 @@ export interface ClinicalSummary {
 }
 
 export interface PipelineLatency {
+  preprocessing: number;
   scribe: number;
+  uncertainty: number;
   tavily: number;
   claude: number;
   total: number;
@@ -57,6 +62,13 @@ export interface StreamFrame {
   words: { word: string; start_ms: number; end_ms: number }[];
 }
 
+export interface AblationRow {
+  stage: string;
+  wer: number;
+  delta: number;
+  description: string;
+}
+
 export interface BenchmarkClipResult {
   clip_id: string;
   category: string;
@@ -66,8 +78,17 @@ export interface BenchmarkClipResult {
   improvement_pct: number;
 }
 
+export interface BenchmarkMetrics {
+  verification_rate: number;
+  unsafe_guess_rate: number;
+  uncertainty_coverage: number;
+  phonetic_hit_rate: number;
+}
+
 export interface BenchmarkResponse {
   results: BenchmarkClipResult[];
+  ablation: AblationRow[];
+  metrics: BenchmarkMetrics;
   aggregate: {
     avg_raw_wer: number;
     avg_corrected_wer: number;
@@ -84,4 +105,4 @@ export interface HealthResponse {
   claude: string;
 }
 
-export type ProcessingStage = "idle" | "uploading" | "scribe" | "tavily" | "claude" | "done" | "error";
+export type ProcessingStage = "idle" | "uploading" | "preprocessing" | "scribe" | "uncertainty" | "tavily" | "claude" | "done" | "error";

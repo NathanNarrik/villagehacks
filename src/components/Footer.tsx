@@ -9,18 +9,17 @@ const Footer = () => (
             CareCaller <span className="text-accent">AI</span>
           </p>
           <p className="text-sm text-primary-foreground/70 mt-1">
-            Healthcare Speech Intelligence Platform
+            Verification-Augmented Speech-to-Text
           </p>
         </div>
         <div className="flex gap-6 text-sm text-primary-foreground/70">
           <Link to="/" className="hover:text-accent transition-colors">Home</Link>
           <Link to="/demo" className="hover:text-accent transition-colors">Demo</Link>
           <Link to="/benchmark" className="hover:text-accent transition-colors">Benchmark</Link>
-          <Link to="/about" className="hover:text-accent transition-colors">About</Link>
         </div>
       </div>
       <div className="border-t border-primary-foreground/20 mt-8 pt-6 text-center text-xs text-primary-foreground/50">
-        Built at Hackathon · April 2026 · Powered by ElevenLabs + Tavily + Claude
+        Built in 12 hours at Hackathon · April 2026 · Powered by ElevenLabs + Tavily + Claude
       </div>
     </div>
   </footer>

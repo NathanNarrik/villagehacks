@@ -35,7 +35,6 @@ const Navbar = () => {
           <Link to="/" className={`text-sm font-medium hover:text-accent transition-colors ${textColor}`}>Home</Link>
           <Link to="/demo" className={`text-sm font-medium hover:text-accent transition-colors ${textColor}`}>Demo</Link>
           <Link to="/benchmark" className={`text-sm font-medium hover:text-accent transition-colors ${textColor}`}>Benchmark</Link>
-          <Link to="/about" className={`text-sm font-medium hover:text-accent transition-colors ${textColor}`}>About</Link>
           <Button asChild variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90 rounded-pill px-6">
             <Link to="/demo">Try Demo</Link>
           </Button>
@@ -53,7 +52,6 @@ const Navbar = () => {
           <Link to="/" className="block text-sm font-medium text-foreground" onClick={() => setMenuOpen(false)}>Home</Link>
           <Link to="/demo" className="block text-sm font-medium text-foreground" onClick={() => setMenuOpen(false)}>Demo</Link>
           <Link to="/benchmark" className="block text-sm font-medium text-foreground" onClick={() => setMenuOpen(false)}>Benchmark</Link>
-          <Link to="/about" className="block text-sm font-medium text-foreground" onClick={() => setMenuOpen(false)}>About</Link>
           <Button asChild variant="default" className="bg-accent text-accent-foreground w-full rounded-pill">
             <Link to="/demo" onClick={() => setMenuOpen(false)}>Try Demo</Link>
           </Button>
