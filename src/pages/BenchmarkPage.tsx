@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, ArrowUpDown } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { Download, ArrowUpDown, Info } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, LineChart, Line } from "recharts";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FadeInSection from "@/components/FadeInSection";
@@ -11,6 +12,12 @@ import type { BenchmarkClipResult } from "@/types/api";
 
 type SortKey = keyof BenchmarkClipResult;
 type Filter = "all" | "Standard" | "Adversarial";
+
+// Simulated learning loop delta data
+const learningLoopData = Array.from({ length: 20 }, (_, i) => ({
+  call: i + 1,
+  wer: +(21.4 - (i * 0.4) + (Math.random() * 0.5 - 0.25)).toFixed(1),
+}));
 
 const BenchmarkPage = () => {
   const data = MOCK_BENCHMARK;
@@ -45,6 +52,8 @@ const BenchmarkPage = () => {
     else { setSortKey(key); setSortAsc(true); }
   };
 
+  const maxWer = data.ablation[0].wer;
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -54,58 +63,94 @@ const BenchmarkPage = () => {
         <FadeInSection>
           <p className="text-8xl font-extrabold text-accent">{data.aggregate.avg_improvement_pct}%</p>
           <p className="text-xl text-foreground mt-4 font-semibold">Fewer medical term errors across 20 adversarial clips</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Raw Scribe v2 WER: {data.aggregate.avg_raw_wer}% → Corrected WER: {data.aggregate.avg_corrected_wer}%
+          <p className="text-sm text-muted-foreground mt-3">
+            Verification Rate: <span className="text-success font-semibold">{data.metrics.verification_rate}%</span> · Unsafe Guess Rate: <span className="text-accent font-semibold">{data.metrics.unsafe_guess_rate}%</span> · Uncertainty Coverage: <span className="text-accent font-semibold">{data.metrics.uncertainty_coverage}%</span>
           </p>
         </FadeInSection>
       </section>
 
       <div className="container mx-auto px-6 max-w-[900px] pb-20">
-        {/* Methodology */}
+
+        {/* Ablation Study Table */}
         <FadeInSection>
-          <div className="mb-12">
-            <h2 className="text-2xl font-bold mb-6">Methodology</h2>
-            <ol className="space-y-3 text-sm text-foreground">
-              {[
-                "ElevenLabs TTS renders 20 healthcare call scripts with diverse voices",
-                "ffmpeg degrades audio to simulate 8kHz telephony conditions",
-                "Scribe v2 transcribes each clip with 100 medical keyterms loaded",
-                "jiwer computes raw WER against known ground truth scripts",
-                "Tavily + Claude correction pipeline applied to each transcript",
-                "jiwer computes corrected WER — improvement measured",
-              ].map((step, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-accent text-accent-foreground text-xs flex items-center justify-center font-bold">{i + 1}</span>
-                  {step}
-                </li>
+          <h2 className="text-2xl font-bold mb-6">Ablation Study</h2>
+          <div className="overflow-x-auto rounded-lg border shadow-card mb-12">
+            <table className="w-full text-sm">
+              <thead className="bg-primary text-primary-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left">Pipeline Stage</th>
+                  <th className="px-4 py-3 text-left w-32">WER</th>
+                  <th className="px-4 py-3 text-left w-20">Delta</th>
+                  <th className="px-4 py-3 text-left">What This Proves</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.ablation.map((row, i) => (
+                  <tr key={i} className={`border-t ${i % 2 === 0 ? "" : "bg-secondary/50"}`}>
+                    <td className="px-4 py-3 font-medium text-foreground">{row.stage}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-foreground">{row.wer}%</span>
+                        <div className="flex-1 bg-muted rounded-full h-2 max-w-[80px]">
+                          <div className="bg-accent rounded-full h-2 transition-all" style={{ width: `${(row.wer / maxWer) * 100}%` }} />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.delta > 0 ? (
+                        <span className="text-success font-semibold">-{row.delta}%</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs">{row.description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </FadeInSection>
+
+        {/* New Metrics Cards */}
+        <FadeInSection>
+          <h2 className="text-2xl font-bold mb-6">Key Metrics</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
+            {[
+              { label: "Verification Rate", value: `${data.metrics.verification_rate}%`, color: "text-success", tip: "Percentage of corrections backed by Tavily confirmation" },
+              { label: "Unsafe Guess Rate", value: `${data.metrics.unsafe_guess_rate}%`, color: "text-accent", tip: "Percentage of corrections made without verification" },
+              { label: "Uncertainty Coverage", value: `${data.metrics.uncertainty_coverage}%`, color: "text-accent", tip: "Low-confidence words correctly flagged before correction" },
+              { label: "Phonetic Hit Rate", value: `${data.metrics.phonetic_hit_rate}%`, color: "text-accent", tip: "Phonetically-close drug name misspellings caught by Layer 3" },
+            ].map((m) => (
+              <Tooltip key={m.label}>
+                <TooltipTrigger asChild>
+                  <div className="bg-card rounded-lg p-4 shadow-card text-center cursor-default hover:shadow-hover transition-shadow">
+                    <p className={`text-3xl font-extrabold ${m.color}`}>{m.value}</p>
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1">
+                      {m.label} <Info className="h-3 w-3" />
+                    </p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent><p className="text-xs max-w-[200px]">{m.tip}</p></TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </FadeInSection>
+
+        {/* Per-clip results */}
+        <FadeInSection>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold">Per-Clip Results</h2>
+            <div className="flex gap-2">
+              {(["all", "Standard", "Adversarial"] as Filter[]).map(f => (
+                <Button key={f} variant={filter === f ? "default" : "outline"} size="sm"
+                  className={filter === f ? "bg-accent text-accent-foreground" : ""}
+                  onClick={() => setFilter(f)}>
+                  {f === "all" ? "All" : f}
+                </Button>
               ))}
-            </ol>
+            </div>
           </div>
-        </FadeInSection>
 
-        {/* Keyterm callout */}
-        <FadeInSection>
-          <div className="bg-accent/10 border border-accent/20 rounded-lg p-6 mb-12">
-            <p className="text-accent font-bold text-lg">{data.aggregate.keyterm_impact_pct}%</p>
-            <p className="text-sm text-foreground mt-1">
-              Scribe v2 Keyterm Prompting reduced drug name errors before any Claude correction.
-            </p>
-          </div>
-        </FadeInSection>
-
-        {/* Filter */}
-        <div className="flex gap-2 mb-4">
-          {(["all", "Standard", "Adversarial"] as Filter[]).map(f => (
-            <Button key={f} variant={filter === f ? "default" : "outline"} size="sm"
-              className={filter === f ? "bg-accent text-accent-foreground" : ""}
-              onClick={() => setFilter(f)}>
-              {f === "all" ? "All" : f}
-            </Button>
-          ))}
-        </div>
-
-        {/* Table */}
-        <FadeInSection>
           <div className="overflow-x-auto rounded-lg border shadow-card mb-12">
             <table className="w-full text-sm">
               <thead className="bg-primary text-primary-foreground">
@@ -116,7 +161,7 @@ const BenchmarkPage = () => {
                     { key: "difficulty" as SortKey, label: "Difficulty" },
                     { key: "raw_wer" as SortKey, label: "Raw WER" },
                     { key: "corrected_wer" as SortKey, label: "Corrected WER" },
-                    { key: "improvement_pct" as SortKey, label: "Improvement" },
+                    { key: "improvement_pct" as SortKey, label: "Delta %" },
                   ].map(col => (
                     <th key={col.key} className="px-4 py-3 text-left cursor-pointer hover:bg-primary-foreground/10 whitespace-nowrap"
                       onClick={() => toggleSort(col.key)}>
@@ -152,7 +197,7 @@ const BenchmarkPage = () => {
           </div>
         </FadeInSection>
 
-        {/* Chart */}
+        {/* Category Chart */}
         <FadeInSection>
           <h3 className="text-lg font-bold mb-4">Average Improvement by Category</h3>
           <div className="h-64 mb-12">
@@ -160,7 +205,7 @@ const BenchmarkPage = () => {
               <BarChart data={chartData} layout="vertical">
                 <XAxis type="number" domain={[0, 50]} tickFormatter={v => `${v}%`} />
                 <YAxis type="category" dataKey="category" width={140} tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v: number) => `${v}%`} />
+                <RechartsTooltip formatter={(v: number) => `${v}%`} />
                 <Bar dataKey="improvement" radius={[0, 4, 4, 0]}>
                   {chartData.map((_, i) => (
                     <Cell key={i} fill="hsl(180 100% 33%)" />
@@ -168,6 +213,46 @@ const BenchmarkPage = () => {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </FadeInSection>
+
+        {/* Learning Loop Delta */}
+        <FadeInSection>
+          <h3 className="text-lg font-bold mb-2">Learning Loop Delta</h3>
+          <p className="text-sm text-muted-foreground mb-4">WER improvement as the adaptive vocabulary grows across 20 calls</p>
+          <div className="h-48 mb-12">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={learningLoopData}>
+                <XAxis dataKey="call" label={{ value: "Call #", position: "insideBottom", offset: -5, fontSize: 12 }} />
+                <YAxis domain={[10, 25]} tickFormatter={v => `${v}%`} />
+                <RechartsTooltip formatter={(v: number) => `${v}%`} labelFormatter={l => `Call ${l}`} />
+                <Line type="monotone" dataKey="wer" stroke="hsl(180 100% 33%)" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </FadeInSection>
+
+        {/* Methodology */}
+        <FadeInSection>
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold mb-6">Methodology</h2>
+            <ol className="space-y-3 text-sm text-foreground">
+              {[
+                "ElevenLabs TTS renders 20 healthcare call scripts with diverse voices and accents",
+                "ffmpeg degrades audio to simulate 8kHz telephony conditions (loudnorm → afftdn → resample)",
+                "Scribe v2 transcribes each clip with dynamic keyterm prompting (up to 100 terms)",
+                "jiwer computes raw WER against known ground truth scripts",
+                "Multi-signal uncertainty detection scores each word (timing + phonetic + keyterm + history)",
+                "Tavily verification fires on LOW-confidence medical-pattern words (capped at 5/transcript)",
+                "Claude corrects only Tavily-confirmed terms; flags all else as [UNVERIFIED]",
+                "jiwer computes corrected WER — improvement measured per stage (ablation)",
+              ].map((step, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-accent text-accent-foreground text-xs flex items-center justify-center font-bold">{i + 1}</span>
+                  {step}
+                </li>
+              ))}
+            </ol>
           </div>
         </FadeInSection>
 

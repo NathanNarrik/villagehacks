@@ -3,10 +3,19 @@ import { Upload, Mic, Square, FileAudio, CheckCircle, AlertTriangle, HelpCircle,
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { MOCK_TRANSCRIBE, DEMO_CLIPS } from "@/services/mockData";
 import type { TranscribeResponse, ProcessingStage, RawWord, CorrectedWord } from "@/types/api";
+
+const PIPELINE_STAGES: { key: ProcessingStage; label: string }[] = [
+  { key: "preprocessing", label: "Preprocessing" },
+  { key: "scribe", label: "Scribe v2 Transcribing" },
+  { key: "uncertainty", label: "Detecting Uncertainty" },
+  { key: "tavily", label: "Verifying with Tavily" },
+  { key: "claude", label: "Correcting" },
+];
 
 const DemoPage = () => {
   const [result, setResult] = useState<TranscribeResponse | null>(null);
@@ -20,13 +29,16 @@ const DemoPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const simulateProcess = useCallback(() => {
-    setStage("scribe");
-    setTimeout(() => setStage("tavily"), 800);
-    setTimeout(() => setStage("claude"), 1600);
+    setResult(null);
+    setStage("preprocessing");
+    setTimeout(() => setStage("scribe"), 500);
+    setTimeout(() => setStage("uncertainty"), 1200);
+    setTimeout(() => setStage("tavily"), 1700);
+    setTimeout(() => setStage("claude"), 2400);
     setTimeout(() => {
       setResult(MOCK_TRANSCRIBE);
       setStage("done");
-    }, 2400);
+    }, 3200);
   }, []);
 
   const handleFileSelect = (file: File) => {
@@ -60,22 +72,14 @@ const DemoPage = () => {
     }
   };
 
-  const handleClipSelect = (clipId: string) => {
+  const handleClipSelect = (_clipId: string) => {
     setShowClipsModal(false);
     setSelectedFile(null);
     setStage("idle");
     simulateProcess();
   };
 
-  const stageText: Record<ProcessingStage, string> = {
-    idle: "",
-    uploading: "Uploading audio...",
-    scribe: "Running Scribe v2...",
-    tavily: "Verifying with Tavily...",
-    claude: "Extracting clinical data...",
-    done: "Complete",
-    error: "Pipeline failed",
-  };
+  const isProcessing = stage !== "idle" && stage !== "done" && stage !== "error";
 
   return (
     <div className="min-h-screen bg-secondary">
@@ -85,9 +89,17 @@ const DemoPage = () => {
       <div className="bg-primary text-primary-foreground pt-20">
         <div className="container mx-auto px-6 max-w-[1400px] py-4 flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-xl font-bold text-primary-foreground">CareCaller AI Demo</h1>
-          <Badge className="bg-accent text-accent-foreground rounded-pill px-4 py-1 text-sm font-semibold">
-            37% fewer medical term errors
-          </Badge>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Badge className="bg-accent text-accent-foreground rounded-pill px-4 py-1 text-sm font-semibold">
+              37% fewer errors
+            </Badge>
+            <Badge className="bg-success text-success-foreground rounded-pill px-3 py-1 text-xs font-semibold">
+              Verification Rate 100%
+            </Badge>
+            <Badge className="bg-accent text-accent-foreground rounded-pill px-3 py-1 text-xs font-semibold">
+              Unsafe Guess Rate 0%
+            </Badge>
+          </div>
           <Button className="border border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 rounded-pill text-sm"
             onClick={() => setShowClipsModal(true)}>
             Demo Clips
@@ -126,7 +138,7 @@ const DemoPage = () => {
             </div>
             {selectedFile && (
               <Button className="mt-4 bg-accent text-accent-foreground hover:bg-accent/90 rounded-pill px-8"
-                onClick={simulateProcess} disabled={stage !== "idle" && stage !== "done"}>
+                onClick={simulateProcess} disabled={isProcessing}>
                 Process Call
               </Button>
             )}
@@ -162,18 +174,35 @@ const DemoPage = () => {
           </TabsContent>
         </Tabs>
 
-        {/* Processing status */}
-        {stage !== "idle" && stage !== "done" && (
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-3 bg-card rounded-pill px-6 py-3 shadow-card">
-              <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm font-medium text-foreground">{stageText[stage]}</span>
+        {/* Pipeline Status Bar */}
+        {isProcessing && (
+          <div className="mb-8">
+            <div className="bg-card rounded-lg shadow-card p-4">
+              <div className="flex items-center gap-2">
+                {PIPELINE_STAGES.map((ps, i) => {
+                  const stageIndex = PIPELINE_STAGES.findIndex(s => s.key === stage);
+                  const isActive = i === stageIndex;
+                  const isDone = i < stageIndex;
+                  return (
+                    <div key={ps.key} className="flex items-center gap-2 flex-1">
+                      <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all w-full ${
+                        isActive ? "bg-accent/15 text-accent" : isDone ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
+                      }`}>
+                        {isActive && <div className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin shrink-0" />}
+                        {isDone && <CheckCircle className="h-3 w-3 shrink-0" />}
+                        <span className="truncate">{ps.label}</span>
+                      </div>
+                      {i < PIPELINE_STAGES.length - 1 && <span className="text-muted-foreground text-xs">→</span>}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
 
         {/* Three Panel Output */}
-        {stage !== "idle" && (
+        {(isProcessing || stage === "done") && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <TranscriptPanel
               title="Raw Transcript"
@@ -257,13 +286,27 @@ const TranscriptPanel = ({ title, loading, words }: { title: string; loading: bo
                 </span>
               );
             }
+
+            let wordCls = "text-sm text-foreground";
+            if (w.confidence === "LOW") wordCls = "text-sm bg-signal-red/20 text-signal-red rounded px-0.5 font-medium";
+            else if (w.confidence === "MEDIUM") wordCls = "text-sm bg-warning/20 text-warning rounded px-0.5";
+
             return (
-              <span key={i}
-                className={`text-sm ${w.uncertain ? "bg-signal-red/20 text-signal-red rounded px-0.5" : "text-foreground"}`}
-                title={`${w.start_ms}ms - ${w.end_ms}ms`}
-              >
-                {w.word}{" "}
-              </span>
+              <Tooltip key={i}>
+                <TooltipTrigger asChild>
+                  <span className={`${wordCls} cursor-default`}>
+                    {w.word}{" "}
+                  </span>
+                </TooltipTrigger>
+                {w.confidence !== "HIGH" && w.uncertainty_signals && (
+                  <TooltipContent>
+                    <p className="text-xs font-semibold mb-1">{w.confidence} confidence</p>
+                    {w.uncertainty_signals.map((s, si) => (
+                      <p key={si} className="text-xs text-muted-foreground">• {s}</p>
+                    ))}
+                  </TooltipContent>
+                )}
+              </Tooltip>
             );
           })}
         </div>
@@ -274,7 +317,7 @@ const TranscriptPanel = ({ title, loading, words }: { title: string; loading: bo
 
 const CorrectedPanel = ({ title, loading, words, latency }: {
   title: string; loading: boolean; words?: CorrectedWord[];
-  latency?: { scribe: number; tavily: number; claude: number; total: number };
+  latency?: TranscribeResponse["pipeline_latency_ms"];
 }) => (
   <div className="bg-card rounded-lg shadow-card overflow-hidden">
     <div className="bg-primary px-4 py-3">

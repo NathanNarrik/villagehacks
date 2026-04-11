@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Landing from "./pages/Landing";
 import DemoPage from "./pages/DemoPage";
 import BenchmarkPage from "./pages/BenchmarkPage";
-import AboutPage from "./pages/AboutPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,7 +20,6 @@ const App = () => (
           <Route path="/" element={<Landing />} />
           <Route path="/demo" element={<DemoPage />} />
           <Route path="/benchmark" element={<BenchmarkPage />} />
-          <Route path="/about" element={<AboutPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
