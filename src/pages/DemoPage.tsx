@@ -173,7 +173,7 @@ const DemoPage = () => {
         )}
 
         {/* Three Panel Output */}
-        {(stage === "done" || (stage !== "idle" && stage !== "done")) && (
+        {stage !== "idle" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <TranscriptPanel
               title="Raw Transcript"
