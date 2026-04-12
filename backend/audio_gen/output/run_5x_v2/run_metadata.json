@@ -1,0 +1,13 @@
+{
+  "completed_at": "2026-04-12T06:29:29.642338+00:00",
+  "failed_clips": 0,
+  "input_hash": "6daeb555132c4c965c25c3baeff511f52a7e26140e659edacda84f7fc7abaf0d",
+  "input_path": "/Users/aayanmapara/Hackathons/villagehacks/backend/audio_gen/input/clips_5x_variants.csv",
+  "manifest_version": "v1",
+  "resume": true,
+  "skipped_clips": 0,
+  "started_at": "2026-04-12T06:23:01.741745+00:00",
+  "submitted_clips": 200,
+  "successful_clips": 200,
+  "total_clips": 200
+}
