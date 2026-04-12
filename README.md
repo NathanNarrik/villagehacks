@@ -1,6 +1,6 @@
-# CareCaller AI — Backend
+# ScribeShield AI — Backend
 
-FastAPI backend for the CareCaller AI verification-augmented STT pipeline.
+FastAPI backend for the ScribeShield AI verification-augmented STT pipeline.
 
 ## Full stack (frontend + backend)
 
