@@ -111,32 +111,36 @@ Completed in this repo iteration:
 
 This workflow is now implemented.
 
-The repo currently has three different pieces of the demo-audio story:
+The repo now has four coordinated pieces in the demo-audio story:
 
 - `backend/audio_gen/input/demo_cards_20260412.csv`
-  - canonical synthesis spec for the six shipped demo clips
+  - canonical synthesis spec for the six shipped situations
 - `backend/test_audio/demo/scripts/*.txt`
   - source scripts that must stay text-identical to the canonical CSV
 - `backend/test_audio/demo/manifest.csv`
   - checked-in mapping for backend demo WAVs and frontend public WAVs
+- `frontend/public/demo-audio/<situation>/*.wav`
+  - the shipped public per-take demo assets used by the frontend demo page
 - `frontend/public/demo-audio/*.wav`
-  - the shipped public demo assets used by the frontend demo page
+  - top-level compatibility aliases for a few signature takes
 
 ### Current Reality
 
-- The frontend demo works by loading fixed `.wav` files from `frontend/public/demo-audio/`.
-- `python -m backend.audio_gen.build_demo_audio` is the repeatable command for regenerating the six shipped demo clips.
-- The wrapper validates the canonical CSV against `backend/test_audio/demo/scripts/*.txt`, generates telephony audio under `backend/audio_gen/output/demo_cards_20260412/`, and exports the shipped WAVs into both backend and frontend asset folders.
-- `backend/test_audio/demo/manifest.csv` now records the canonical clip ids, backend demo WAV paths, script references, and frontend public WAV paths.
+- The frontend demo now works by selecting one of six situations, then one of four takes for that situation.
+- `conda run -n village-hacks python -m backend.audio_gen.build_demo_audio` is the repeatable command for regenerating the shipped demo set.
+- The wrapper validates the canonical CSV against `backend/test_audio/demo/scripts/*.txt`, expands the six situations into 24 takes, generates telephony audio under `backend/audio_gen/output/demo_cards_20260412/`, and exports the shipped WAVs into both backend and frontend asset folders.
+- Ambient/noisy variants are remixed with richer background beds like conversation, TV, music, and room tone rather than static-only noise.
+- `backend/test_audio/demo/manifest.csv` now records the canonical clip ids, backend demo WAV paths, script references, and frontend public WAV paths for all 24 takes.
 
 ### Current Demo-Audio Contract
 
 - Canonical generation spec: `backend/audio_gen/input/demo_cards_20260412.csv`
 - Canonical script text: `backend/test_audio/demo/scripts/*.txt`
 - Exported backend demo WAVs: `backend/test_audio/demo/audio/`
-- Exported frontend demo WAVs: `frontend/public/demo-audio/`
+- Exported frontend demo WAVs: `frontend/public/demo-audio/<situation>/`
+- Top-level frontend aliases: `frontend/public/demo-audio/*.wav`
 - Checked-in mapping: `backend/test_audio/demo/manifest.csv`
-- Frontend card metadata remains hardcoded in `frontend/src/pages/DemoPage.tsx`, but the card ids now match the canonical clip ids from the demo CSV.
+- Frontend situation metadata remains hardcoded in `frontend/src/pages/DemoPage.tsx`, but the situation ids now match the canonical clip ids from the demo CSV.
 
 ## Remaining Workstreams
 
@@ -151,9 +155,9 @@ The repo currently has three different pieces of the demo-audio story:
 
 ### 2. Demo Audio Pipeline
 
-- Re-run `python -m backend.audio_gen.build_demo_audio` whenever the six demo scripts or canonical demo CSV change.
+- Re-run `conda run -n village-hacks python -m backend.audio_gen.build_demo_audio` whenever the six demo scripts or canonical demo CSV change.
 - Keep the exported backend/frontend WAVs committed and aligned with the manifest after each regeneration.
-- Preserve the current friendly frontend public filenames because the live demo page depends on them.
+- Preserve the current nested frontend public structure and the top-level compatibility aliases because the live demo page depends on them.
 
 ### 3. Benchmark Pipeline
 

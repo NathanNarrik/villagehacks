@@ -18,7 +18,6 @@ import FadeInSection from "@/components/FadeInSection";
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import { fetchBenchmark } from "@/services/api";
-import { MOCK_BENCHMARK } from "@/services/mockData";
 import type { BenchmarkClipResult, BenchmarkResponse } from "@/types/api";
 
 type SortKey = keyof BenchmarkClipResult;
@@ -48,9 +47,10 @@ const fmtPercent = (value: number | null | undefined, decimals = 1): string => {
 };
 
 const BenchmarkPage = () => {
-  const [data, setData] = useState<BenchmarkResponse>(MOCK_BENCHMARK);
-  const [dataSource, setDataSource] = useState<"api" | "mock">("mock");
+  const [data, setData] = useState<BenchmarkResponse | null>(null);
+  const [dataSource, setDataSource] = useState<"api" | "unavailable">("unavailable");
   const [benchmarkNote, setBenchmarkNote] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("clip_id");
   const [sortAsc, setSortAsc] = useState(true);
@@ -64,6 +64,8 @@ const BenchmarkPage = () => {
           ? ("adversarial" as const)
           : ("standard" as const);
 
+    setLoading(true);
+
     fetchBenchmark(clips)
       .then((payload) => {
         if (cancelled) return;
@@ -71,13 +73,19 @@ const BenchmarkPage = () => {
         setDataSource("api");
         setBenchmarkNote(null);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (cancelled) return;
-        setData(MOCK_BENCHMARK);
-        setDataSource("mock");
+        setData(null);
+        setDataSource("unavailable");
         setBenchmarkNote(
-          "Live benchmark data unavailable; showing embedded sample benchmark data.",
+          error instanceof Error
+            ? `Live benchmark data unavailable: ${error.message}`
+            : "Live benchmark data unavailable. Run backend/scripts/run_benchmark.py --run-pipeline to generate real benchmark data.",
         );
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
       });
 
     return () => {
@@ -87,18 +95,18 @@ const BenchmarkPage = () => {
 
   const normalizedResults = useMemo(
     () =>
-      data.results.map((row) => ({
+      (data?.results ?? []).map((row) => ({
         ...row,
         raw_wer_pct: toPercent(row.raw_wer) ?? 0,
         corrected_wer_pct: toPercent(row.corrected_wer) ?? 0,
         improvement_pct_norm: toPercent(row.improvement_pct) ?? 0,
       })),
-    [data.results],
+    [data],
   );
 
   const ablationRows = useMemo(
     () =>
-      data.ablation.map((row, idx, all) => {
+      (data?.ablation ?? []).map((row, idx, all) => {
         const werPct = toPercent(row.wer) ?? 0;
         const prevWerPct = idx > 0 ? toPercent(all[idx - 1].wer) ?? 0 : null;
         const deltaPct = prevWerPct === null ? null : werPct - prevWerPct;
@@ -108,7 +116,7 @@ const BenchmarkPage = () => {
           delta_pct: deltaPct,
         };
       }),
-    [data.ablation],
+    [data],
   );
 
   const maxAblationWer = useMemo(
@@ -163,53 +171,56 @@ const BenchmarkPage = () => {
   );
 
   const metricCards = useMemo(() => {
+    const metrics = data?.metrics;
+    if (!metrics) return [];
+
     const cards = [
       {
         label: "Verification Rate",
-        value: fmtPercent(data.metrics.verification_rate),
+        value: fmtPercent(metrics.verification_rate),
         tip: "Corrections backed by Tavily confirmation.",
       },
       {
         label: "Unsafe Guess Rate",
-        value: fmtPercent(data.metrics.unsafe_guess_rate),
+        value: fmtPercent(metrics.unsafe_guess_rate),
         tip: "Corrections made without verification.",
       },
       {
         label: "Uncertainty Coverage",
-        value: fmtPercent(data.metrics.uncertainty_coverage),
-        tip: "Low-confidence words correctly flagged.",
+        value: fmtPercent(metrics.uncertainty_coverage),
+        tip: "Raw transcript errors surfaced as LOW/MEDIUM confidence tokens.",
       },
       {
         label: "Phonetic Hit Rate",
-        value: fmtPercent(data.metrics.phonetic_hit_rate),
-        tip: "Drug name misspellings caught.",
+        value: fmtPercent(metrics.phonetic_hit_rate),
+        tip: "Verified corrections whose source token tripped a phonetic-distance signal.",
       },
     ];
 
     if (
-      data.metrics.digit_accuracy_coverage !== null &&
-      data.metrics.digit_accuracy_coverage !== undefined
+      metrics.digit_accuracy_coverage !== null &&
+      metrics.digit_accuracy_coverage !== undefined
     ) {
       cards.push({
         label: "Digit Coverage",
-        value: fmtPercent(data.metrics.digit_accuracy_coverage),
+        value: fmtPercent(metrics.digit_accuracy_coverage),
         tip: "Share of clips containing evaluable numeric references.",
       });
     }
 
     if (
-      data.metrics.medical_keyword_accuracy_coverage !== null &&
-      data.metrics.medical_keyword_accuracy_coverage !== undefined
+      metrics.medical_keyword_accuracy_coverage !== null &&
+      metrics.medical_keyword_accuracy_coverage !== undefined
     ) {
       cards.push({
         label: "Medical Keyword Coverage",
-        value: fmtPercent(data.metrics.medical_keyword_accuracy_coverage),
+        value: fmtPercent(metrics.medical_keyword_accuracy_coverage),
         tip: "Share of clips containing evaluable medical-term references.",
       });
     }
 
     return cards;
-  }, [data.metrics]);
+  }, [data]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -231,22 +242,49 @@ const BenchmarkPage = () => {
               {benchmarkNote}
             </div>
           )}
-          {dataSource === "api" && !benchmarkNote && (
+          {dataSource === "api" && data && !benchmarkNote && (
             <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-xs text-success">
               Showing benchmark results from API (
               {import.meta.env.VITE_API_URL || "VITE_API_URL"})
             </div>
           )}
           <h1 className="text-2xl font-bold text-foreground">Benchmark Results</h1>
-          <p className="text-sm text-muted-foreground mt-2">
-            {fmtPercent(data.aggregate.avg_improvement_pct)} average correction lift.
-            Verification rate {fmtPercent(data.metrics.verification_rate)}, unsafe
-            guess rate {fmtPercent(data.metrics.unsafe_guess_rate)}.
-          </p>
+          {data ? (
+            <p className="text-sm text-muted-foreground mt-2">
+              {fmtPercent(data.aggregate.avg_improvement_pct)} average correction lift.
+              Verification rate {fmtPercent(data.metrics.verification_rate)}, unsafe
+              guess rate {fmtPercent(data.metrics.unsafe_guess_rate)}.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground mt-2">
+              This page only shows API-backed benchmark results. Generate real data
+              with `backend/scripts/run_benchmark.py --run-pipeline` and reload.
+            </p>
+          )}
         </div>
       </section>
 
       <div className="container mx-auto px-6 max-w-[900px] pb-20">
+        {loading && (
+          <FadeInSection>
+            <div className="rounded-lg border shadow-card p-6 text-sm text-muted-foreground">
+              Loading benchmark results from the backend...
+            </div>
+          </FadeInSection>
+        )}
+
+        {!data && !loading && (
+          <FadeInSection>
+            <div className="rounded-lg border shadow-card p-6 text-sm text-muted-foreground">
+              The backend did not return benchmark results. Start the API, then run
+              `python backend/scripts/run_benchmark.py --run-pipeline` so `/benchmark`
+              serves real data instead of sample numbers.
+            </div>
+          </FadeInSection>
+        )}
+
+        {data && (
+          <>
         <FadeInSection>
           <h2 className="text-2xl font-bold mb-6">Ablation Study</h2>
           <div className="overflow-x-auto rounded-lg border shadow-card mb-12">
@@ -521,6 +559,8 @@ const BenchmarkPage = () => {
         >
           <Download className="h-4 w-4" /> Download Full Results JSON
         </Button>
+          </>
+        )}
       </div>
 
       <Footer />

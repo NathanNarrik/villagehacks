@@ -16,21 +16,26 @@ Optional fields:
 """
 from __future__ import annotations
 
+import asyncio
 import argparse
 import csv
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any, Sequence
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = BACKEND_DIR.parent
 DEFAULT_RESULTS_PATH = BACKEND_DIR / "data" / "benchmark_results.json"
 DEFAULT_RESULTS_EXAMPLE_PATH = BACKEND_DIR / "data" / "benchmark_results.json.example"
 DEFAULT_EVAL_PATH = BACKEND_DIR / "data" / "benchmark_eval.jsonl"
 DEFAULT_MANIFEST_PATH = BACKEND_DIR / "test_audio" / "benchmark" / "v1" / "manifest.csv"
+DEFAULT_GENERATED_TELEPHONY_DIR = BACKEND_DIR / "audio_gen" / "output" / "run_5x_v2" / "telephony"
 
 _WORD_RE = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
 _DIGIT_RE = re.compile(r"\d")
+_SOURCE_CLIP_RE = re.compile(r"\((clip_[0-9]{4}_[a-z0-9_]+)\)")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -58,6 +63,14 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_MANIFEST_PATH,
         help="Benchmark manifest CSV (ground_truth/keywords/category/difficulty metadata)",
+    )
+    parser.add_argument(
+        "--run-pipeline",
+        action="store_true",
+        help=(
+            "Generate eval rows by running the live preprocessing/scribe/verification/"
+            "correction pipeline over benchmark audio before recomputing metrics"
+        ),
     )
     return parser.parse_args()
 
@@ -94,6 +107,47 @@ def _load_manifest_rows(path: Path) -> dict[str, dict[str, str]]:
             return out
     except Exception as exc:  # noqa: BLE001
         raise SystemExit(f"Malformed benchmark manifest CSV ({path}): {exc}") from exc
+
+
+def _ordered_manifest_rows(manifest_rows_by_clip: dict[str, dict[str, str]]) -> list[dict[str, str]]:
+    return [manifest_rows_by_clip[key] for key in sorted(manifest_rows_by_clip)]
+
+
+def _ensure_backend_imports() -> None:
+    for path in (BACKEND_DIR, REPO_ROOT):
+        path_str = str(path)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
+
+
+def _extract_source_clip_id(notes: str) -> str | None:
+    match = _SOURCE_CLIP_RE.search(notes or "")
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _resolve_benchmark_audio_path(
+    manifest_row: dict[str, str],
+    manifest_path: Path,
+    generated_telephony_dir: Path = DEFAULT_GENERATED_TELEPHONY_DIR,
+) -> Path:
+    audio_relpath = str(manifest_row.get("audio_relpath") or "").strip()
+    if audio_relpath:
+        candidate = manifest_path.parent / audio_relpath
+        if candidate.exists():
+            return candidate
+
+    source_clip_id = _extract_source_clip_id(str(manifest_row.get("notes") or ""))
+    if source_clip_id:
+        fallback = generated_telephony_dir / f"{source_clip_id}.wav"
+        if fallback.exists():
+            return fallback
+
+    clip_id = str(manifest_row.get("clip_id") or "").strip() or "<unknown>"
+    raise SystemExit(
+        f"Benchmark audio missing for {clip_id}: expected {audio_relpath or 'manifest audio_relpath'}"
+    )
 
 
 def _round(value: float) -> float:
@@ -182,6 +236,49 @@ def _contains_phrase(tokens: Sequence[str], phrase: Sequence[str]) -> bool:
         if list(tokens[idx : idx + size]) == list(phrase):
             return True
     return False
+
+
+def _error_hypothesis_indices(reference: Sequence[str], hypothesis: Sequence[str]) -> set[int]:
+    rows = len(reference)
+    cols = len(hypothesis)
+    dp = [[0] * (cols + 1) for _ in range(rows + 1)]
+
+    for i in range(rows + 1):
+        dp[i][0] = i
+    for j in range(cols + 1):
+        dp[0][j] = j
+
+    for i, ref_tok in enumerate(reference, start=1):
+        for j, hyp_tok in enumerate(hypothesis, start=1):
+            cost = 0 if ref_tok == hyp_tok else 1
+            dp[i][j] = min(
+                dp[i - 1][j] + 1,
+                dp[i][j - 1] + 1,
+                dp[i - 1][j - 1] + cost,
+            )
+
+    i = rows
+    j = cols
+    hypothesis_error_indices: set[int] = set()
+    while i > 0 or j > 0:
+        if i > 0 and j > 0:
+            cost = 0 if reference[i - 1] == hypothesis[j - 1] else 1
+            if dp[i][j] == dp[i - 1][j - 1] + cost:
+                if cost:
+                    hypothesis_error_indices.add(j - 1)
+                i -= 1
+                j -= 1
+                continue
+        if j > 0 and dp[i][j] == dp[i][j - 1] + 1:
+            hypothesis_error_indices.add(j - 1)
+            j -= 1
+            continue
+        if i > 0 and dp[i][j] == dp[i - 1][j] + 1:
+            i -= 1
+            continue
+        break
+
+    return hypothesis_error_indices
 
 
 def _load_medical_terms() -> list[list[str]]:
@@ -517,17 +614,241 @@ def _recompute(
     return payload
 
 
+def _join_text(parts: Sequence[str]) -> str:
+    return " ".join(part.strip() for part in parts if part and part.strip())
+
+
+def _scaled_ratio(value: float | None, scale: float) -> float:
+    if value is None:
+        return 0.0
+    return _round(value * scale)
+
+
+def _build_ablation_rows(
+    eval_rows: Sequence[dict[str, Any]],
+    *,
+    wer_scale: float,
+) -> tuple[list[dict[str, Any]], float]:
+    if not eval_rows:
+        return [], 0.0
+
+    reference_tokens = [_tokens(str(row.get("ground_truth") or "")) for row in eval_rows]
+    stage_keys = [
+        (
+            "baseline_raw_text",
+            "Raw Scribe v2 (no preprocessing, no keyterms)",
+            "Direct Scribe pass on the source telephony clip with no preprocessing or benchmark keyterms.",
+        ),
+        (
+            "preprocessed_raw_text",
+            "+ Audio Preprocessing",
+            "Runs the ffmpeg preprocessing chain before transcription, still with no benchmark keyterms.",
+        ),
+        (
+            "keyterm_raw_text",
+            "+ Dynamic Keyterms",
+            "Feeds the live learning-loop keyterms into Scribe before any verification or correction.",
+        ),
+        (
+            "corrected_text",
+            "+ Tavily Verification + Safe Correction",
+            "Applies the full uncertainty, verification, and Claude correction pipeline with the hallucination guard.",
+        ),
+    ]
+
+    rows: list[dict[str, Any]] = []
+    previous_wer: float | None = None
+    stage_wers: dict[str, float] = {}
+
+    for key, stage_name, description in stage_keys:
+        values: list[float] = []
+        for reference, eval_row in zip(reference_tokens, eval_rows):
+            hypothesis = _tokens(str(eval_row.get(key) or ""))
+            values.append(_error_rate_ratio(reference, hypothesis))
+        avg_wer = _mean(values)
+        stage_wers[key] = avg_wer
+        scaled_wer = _round(avg_wer * wer_scale)
+        delta = 0.0 if previous_wer is None else _round(scaled_wer - previous_wer)
+        rows.append(
+            {
+                "stage": stage_name,
+                "wer": scaled_wer,
+                "delta": delta,
+                "description": description,
+            }
+        )
+        previous_wer = scaled_wer
+
+    keyterm_stage = stage_wers.get("keyterm_raw_text", 0.0)
+    preprocessed_stage = stage_wers.get("preprocessed_raw_text", 0.0)
+    keyterm_impact_pct = 0.0
+    if preprocessed_stage > 0:
+        keyterm_impact_pct = max(0.0, ((preprocessed_stage - keyterm_stage) / preprocessed_stage) * 100.0)
+
+    return rows, _round(keyterm_impact_pct)
+
+
+async def _generate_eval_rows_via_pipeline(
+    manifest_rows_by_clip: dict[str, dict[str, str]],
+    *,
+    manifest_path: Path,
+    wer_scale: float,
+    rate_scale: float,
+) -> tuple[list[dict[str, Any]], dict[str, float], list[dict[str, Any]], float]:
+    _ensure_backend_imports()
+
+    from app import learning_loop, pipeline, preprocessing, scribe  # type: ignore
+    from app.claude_correct import reset_corrector  # type: ignore
+    from app.storage import store  # type: ignore
+    from app.tavily_verify import reset_verifier  # type: ignore
+
+    store.reset()
+    reset_verifier()
+    reset_corrector()
+
+    eval_rows: list[dict[str, Any]] = []
+    verified_changes = 0
+    unresolved_flagged = 0
+    unsafe_changes = 0
+    total_changed = 0
+    phonetic_hits = 0
+    total_error_tokens = 0
+    flagged_error_tokens = 0
+
+    for manifest_row in _ordered_manifest_rows(manifest_rows_by_clip):
+        clip_id = str(manifest_row.get("clip_id") or "").strip()
+        reference_text = str(manifest_row.get("ground_truth") or "").strip()
+        if not clip_id or not reference_text:
+            raise SystemExit(
+                f"Benchmark manifest row is missing clip_id or ground_truth: {manifest_row}"
+            )
+
+        audio_path = _resolve_benchmark_audio_path(manifest_row, manifest_path)
+        cleaned_path = await preprocessing.preprocess(str(audio_path))
+
+        baseline_result = await scribe.transcribe_batch(str(audio_path), [])
+        preprocessed_result = await scribe.transcribe_batch(cleaned_path, [])
+        keyterms = learning_loop.get_keyterms(top_n=100)
+        keyterm_result = await scribe.transcribe_batch(cleaned_path, keyterms)
+        final_result = await pipeline.run_pipeline_from_scribe_words(keyterm_result.words)
+
+        baseline_raw_text = _join_text([word.text for word in baseline_result.words])
+        preprocessed_raw_text = _join_text([word.text for word in preprocessed_result.words])
+        keyterm_raw_text = _join_text([word.text for word in keyterm_result.words])
+        corrected_text = _join_text([word.word for word in final_result.corrected_transcript])
+
+        eval_rows.append(
+            {
+                "clip_id": clip_id,
+                "category": str(manifest_row.get("category") or "Unknown"),
+                "difficulty": str(manifest_row.get("difficulty") or "Standard"),
+                "ground_truth": reference_text,
+                "raw_text": keyterm_raw_text,
+                "corrected_text": corrected_text,
+                "baseline_raw_text": baseline_raw_text,
+                "preprocessed_raw_text": preprocessed_raw_text,
+                "keyterm_raw_text": keyterm_raw_text,
+                "medical_keywords": str(manifest_row.get("medical_keywords") or ""),
+            }
+        )
+
+        raw_tokens = _tokens(keyterm_raw_text)
+        reference_tokens = _tokens(reference_text)
+        error_indices = _error_hypothesis_indices(reference_tokens, raw_tokens)
+        total_error_tokens += len(error_indices)
+
+        token_confidences: list[str] = []
+        for raw_word in final_result.raw_transcript:
+            word_tokens = _tokens(raw_word.word)
+            if not word_tokens:
+                continue
+            token_confidences.extend([raw_word.confidence] * len(word_tokens))
+
+        for idx in error_indices:
+            if idx < len(token_confidences) and token_confidences[idx] in {"LOW", "MEDIUM"}:
+                flagged_error_tokens += 1
+
+        for raw_word, corrected_word in zip(
+            final_result.raw_transcript,
+            final_result.corrected_transcript,
+        ):
+            if corrected_word.changed:
+                total_changed += 1
+                if corrected_word.tavily_verified:
+                    verified_changes += 1
+                    if any(
+                        signal.startswith("phonetic_distance")
+                        for signal in (raw_word.uncertainty_signals or [])
+                    ):
+                        phonetic_hits += 1
+                else:
+                    unsafe_changes += 1
+            elif corrected_word.unverified:
+                unresolved_flagged += 1
+
+    verification_denominator = verified_changes + unresolved_flagged
+    metrics = {
+        "verification_rate": _scaled_ratio(
+            (verified_changes / verification_denominator) if verification_denominator else None,
+            rate_scale,
+        ),
+        "unsafe_guess_rate": _scaled_ratio(
+            (unsafe_changes / total_changed) if total_changed else None,
+            rate_scale,
+        ),
+        "uncertainty_coverage": _scaled_ratio(
+            (flagged_error_tokens / total_error_tokens) if total_error_tokens else None,
+            rate_scale,
+        ),
+        "phonetic_hit_rate": _scaled_ratio(
+            (phonetic_hits / verified_changes) if verified_changes else None,
+            rate_scale,
+        ),
+    }
+    ablation, keyterm_impact_pct = _build_ablation_rows(eval_rows, wer_scale=wer_scale)
+    return eval_rows, metrics, ablation, keyterm_impact_pct
+
+
 def main() -> int:
     args = _parse_args()
     source = _resolve_source_path(args.source)
     payload = _load_json(source)
     manifest_rows_by_clip = _load_manifest_rows(args.manifest)
+    wer_scale, rate_scale = _scale_from_source(payload)
+
+    if args.run_pipeline:
+        eval_rows, metrics, ablation, keyterm_impact_pct = asyncio.run(
+            _generate_eval_rows_via_pipeline(
+                manifest_rows_by_clip,
+                manifest_path=args.manifest,
+                wer_scale=wer_scale,
+                rate_scale=rate_scale,
+            )
+        )
+        args.eval.parent.mkdir(parents=True, exist_ok=True)
+        args.eval.write_text(
+            "".join(json.dumps(row) + "\n" for row in eval_rows),
+            encoding="utf-8",
+        )
+        payload["metrics"] = {
+            **(payload.get("metrics") if isinstance(payload.get("metrics"), dict) else {}),
+            **metrics,
+        }
+        payload["ablation"] = ablation
+        aggregate = payload.get("aggregate")
+        if not isinstance(aggregate, dict):
+            aggregate = {}
+        aggregate["keyterm_impact_pct"] = keyterm_impact_pct
+        payload["aggregate"] = aggregate
+
     payload = _recompute(payload, args.eval, manifest_rows_by_clip=manifest_rows_by_clip)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
-    if args.eval.exists():
+    if args.run_pipeline:
+        print(f"Wrote live benchmark eval rows and recomputed artifact: {args.out}")
+    elif args.eval.exists():
         print(f"Wrote recomputed benchmark artifact from eval rows: {args.out}")
     else:
         print(f"Wrote benchmark artifact from baseline source: {args.out}")

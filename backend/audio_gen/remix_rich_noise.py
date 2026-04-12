@@ -51,11 +51,16 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
-    run_dir = Path(args.run_dir)
-    manifest_in = run_dir / args.manifest_in
-    manifest_out = run_dir / args.manifest_out
+def remix_run_dir(
+    *,
+    run_dir: Path,
+    manifest_in_name: str = "clips.jsonl",
+    manifest_out_name: str = "clips_rich_noise.jsonl",
+    conversation_tracks: int = 3,
+    timeout_s: float = 180.0,
+) -> dict[str, Any]:
+    manifest_in = run_dir / manifest_in_name
+    manifest_out = run_dir / manifest_out_name
 
     if not manifest_in.exists():
         raise SystemExit(f"Input manifest not found: {manifest_in}")
@@ -101,28 +106,28 @@ def main() -> int:
             telephony_out = telephony_rich_dir / f"{safe_name}.wav"
 
             noise_profile = str(row.get("noise_profile", "medium")).strip().lower()
-            conversation_tracks = _choose_conversation_tracks(
+            selected_tracks = _choose_conversation_tracks(
                 pool=conversation_pool,
                 exclude_clip_id=clip_id,
-                count=max(1, args.conversation_tracks),
+                count=max(1, conversation_tracks),
                 seed=clip_id,
             )
 
             try:
                 transcode_with_rich_background(
                     foreground_input_path=source_raw,
-                    conversation_input_paths=conversation_tracks,
+                    conversation_input_paths=selected_tracks,
                     output_path=clean_out,
                     sample_rate=CLEAN_SAMPLE_RATE,
                     ffmpeg_bin=ffmpeg_bin,
-                    timeout_s=args.timeout_s,
+                    timeout_s=timeout_s,
                     noise_profile=noise_profile,
                 )
                 verify_audio_file(
                     path=clean_out,
                     expected=clean_expected,
                     ffprobe_bin=ffprobe_bin,
-                    timeout_s=args.timeout_s,
+                    timeout_s=timeout_s,
                 )
 
                 transcode_to_pcm_wav(
@@ -130,14 +135,14 @@ def main() -> int:
                     output_path=telephony_out,
                     sample_rate=TELEPHONY_SAMPLE_RATE,
                     ffmpeg_bin=ffmpeg_bin,
-                    timeout_s=args.timeout_s,
+                    timeout_s=timeout_s,
                     background_noise_profile=None,
                 )
                 verify_audio_file(
                     path=telephony_out,
                     expected=telephony_expected,
                     ffprobe_bin=ffprobe_bin,
-                    timeout_s=args.timeout_s,
+                    timeout_s=timeout_s,
                 )
 
                 new_row = dict(row)
@@ -169,6 +174,18 @@ def main() -> int:
     (run_dir / "rich_noise_summary.json").write_text(
         json.dumps({"summary": summary, "failures": failed}, indent=2),
         encoding="utf-8",
+    )
+    return summary
+
+
+def main() -> int:
+    args = parse_args()
+    summary = remix_run_dir(
+        run_dir=Path(args.run_dir),
+        manifest_in_name=args.manifest_in,
+        manifest_out_name=args.manifest_out,
+        conversation_tracks=args.conversation_tracks,
+        timeout_s=args.timeout_s,
     )
 
     print(json.dumps(summary, indent=2))

@@ -58,18 +58,16 @@ Open the **Local** URL Vite prints (e.g. `http://localhost:8080`, or `8081` if 8
 
 **If `npm run dev` fails:** run it from `frontend/` or the repo root only (not a parent folder). On Windows, if the dev server still exits immediately, try `set VITE_DISABLE_LOVABLE_TAGGER=1` then `npm run dev` to disable the Lovable component tagger plugin. The Browserslist “caniuse-lite is old” message is a warning, not a failure.
 
-- **Demo**: each scenario loads a **`.wav`** from `frontend/public/demo-audio/`, sends it to `POST /transcribe`, and renders the real response. The shipped clips are generated from `backend/audio_gen/input/demo_cards_20260412.csv`; regenerate them with `python -m backend.audio_gen.build_demo_audio`.
-- **Benchmark**: loads `GET /benchmark` when the backend is up; falls back to embedded sample data if the server is down or returns an error. The file `backend/data/benchmark_results.json` is gitignored — copy `backend/data/benchmark_results.json.example` to that path (or run Person A’s benchmark script) so the API can serve real results instead of 503.
+- **Demo**: the frontend exposes six base situations, each with four generated takes (`clear_call`, `ambient_noise`, `heavy_accent`, `clinical_handoff`). Those WAVs live under `frontend/public/demo-audio/<situation>/`, and each take is sent to `POST /transcribe` and rendered with the real backend response. The shipped clips are generated from `backend/audio_gen/input/demo_cards_20260412.csv`; regenerate them with `conda run -n village-hacks python -m backend.audio_gen.build_demo_audio`.
+- **Benchmark**: loads `GET /benchmark` from the backend and only renders API-backed results. Generate fresh benchmark artifacts with `python backend/scripts/run_benchmark.py --run-pipeline`. The output file `backend/data/benchmark_results.json` is gitignored, so `/benchmark` returns 503 until you generate it.
 
 ## Backend only
 
 ```bash
+conda activate village-hacks
 cd backend
-python -m venv .venv
-.venv\Scripts\activate            # Windows
-# source .venv/bin/activate       # macOS/Linux
 pip install -r requirements.txt
-copy .env.example .env             # then fill in API keys
+cp .env.example .env              # then fill in API keys
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 

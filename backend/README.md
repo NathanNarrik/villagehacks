@@ -78,22 +78,26 @@ The generator accepts either environment variable name:
 - `ELEVENLABS_API_KEY`
 - `ELEVEN_LABS_API_KEY`
 
-To regenerate the shipped six demo clips and export them into both backend and frontend asset folders:
+To regenerate the shipped demo catalog and export it into both backend and frontend asset folders:
 
 ```bash
-python -m backend.audio_gen.build_demo_audio
+conda run -n village-hacks python -m backend.audio_gen.build_demo_audio
 ```
 
 That wrapper reads `backend/audio_gen/input/demo_cards_20260412.csv`, validates the
-matching `backend/test_audio/demo/scripts/*.txt`, generates telephony WAVs under
-`backend/audio_gen/output/demo_cards_20260412/`, then copies the shipped files into:
+matching `backend/test_audio/demo/scripts/*.txt`, expands the six base situations into
+four takes each, generates telephony WAVs under `backend/audio_gen/output/demo_cards_20260412/`,
+then copies the shipped files into:
 
 - `backend/test_audio/demo/audio/`
 - `frontend/public/demo-audio/`
 
 It also rewrites `backend/test_audio/demo/manifest.csv` so the checked-in demo mapping
-stays aligned with the canonical six-row demo spec.
+stays aligned with the canonical six-situation, twenty-four-take demo spec.
 The demo wrapper does a clean rebuild by default; add `--resume` only when retrying a partial failure.
+
+Ambient variants are remixed with richer beds like background conversation, room tone,
+TV, or music rather than plain static.
 
 Input requirements:
 
@@ -156,7 +160,7 @@ Integration tests auto-skip if `ffmpeg`/`ffprobe` are unavailable.
 Generate `/benchmark` data at `backend/data/benchmark_results.json`:
 
 ```bash
-python backend/scripts/run_benchmark.py
+python backend/scripts/run_benchmark.py --run-pipeline
 ```
 
 The script also reads benchmark metadata from
@@ -164,8 +168,13 @@ The script also reads benchmark metadata from
 medical keywords) so benchmark recomputation stays aligned with the versioned audio
 manifest.
 
-For recomputed WER/CER, digit-level accuracy, and medical keyword accuracy, provide
-`backend/data/benchmark_eval.jsonl` rows with:
+`--run-pipeline` uses the real preprocessing, Scribe, uncertainty, Tavily, and
+Claude stack against the benchmark audio set, writes `backend/data/benchmark_eval.jsonl`,
+then recomputes the final JSON artifact from those live eval rows.
+
+If you already have eval rows and only want to recompute WER/CER, digit-level
+accuracy, and medical keyword accuracy, provide `backend/data/benchmark_eval.jsonl`
+with:
 
 - `clip_id`
 - `ground_truth` (or `reference_text` / `text`)

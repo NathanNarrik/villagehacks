@@ -97,3 +97,83 @@ def test_recompute_metrics_from_eval_rows(tmp_path):
     assert agg["avg_corrected_digit_accuracy"] is not None
     assert agg["avg_raw_medical_keyword_accuracy"] is not None
     assert agg["avg_corrected_medical_keyword_accuracy"] is not None
+
+
+def test_resolve_benchmark_audio_path_prefers_manifest_audio(tmp_path):
+    mod = _load_run_benchmark_module()
+    manifest_path = tmp_path / "manifest.csv"
+    audio_dir = tmp_path / "audio" / "standard"
+    audio_dir.mkdir(parents=True)
+    audio_path = audio_dir / "clip_01.wav"
+    audio_path.write_bytes(b"wav")
+
+    resolved = mod._resolve_benchmark_audio_path(
+        {
+            "clip_id": "clip_01",
+            "audio_relpath": "audio/standard/clip_01.wav",
+            "notes": "source: something (clip_0001_clean)",
+        },
+        manifest_path,
+    )
+
+    assert resolved == audio_path
+
+
+def test_resolve_benchmark_audio_path_falls_back_to_generated_source(tmp_path):
+    mod = _load_run_benchmark_module()
+    manifest_path = tmp_path / "manifest.csv"
+    generated_dir = tmp_path / "generated"
+    generated_dir.mkdir()
+    fallback = generated_dir / "clip_0002_clean.wav"
+    fallback.write_bytes(b"wav")
+
+    resolved = mod._resolve_benchmark_audio_path(
+        {
+            "clip_id": "clip_02",
+            "audio_relpath": "audio/standard/clip_02.wav",
+            "notes": "source: audio_gen/input/clips_5x_variants.csv (clip_0002_clean)",
+        },
+        manifest_path,
+        generated_telephony_dir=generated_dir,
+    )
+
+    assert resolved == fallback
+
+
+def test_build_ablation_rows_uses_live_eval_stage_texts():
+    mod = _load_run_benchmark_module()
+
+    rows, keyterm_impact_pct = mod._build_ablation_rows(
+        [
+            {
+                "ground_truth": "I take metformin 50 mg once daily",
+                "baseline_raw_text": "I take metfornin 15 mg once daily",
+                "preprocessed_raw_text": "I take metfornin 50 mg once daily",
+                "keyterm_raw_text": "I take metformin 50 mg once daily",
+                "corrected_text": "I take metformin 50 mg once daily",
+            }
+        ],
+        wer_scale=100.0,
+    )
+
+    assert [row["stage"] for row in rows] == [
+        "Raw Scribe v2 (no preprocessing, no keyterms)",
+        "+ Audio Preprocessing",
+        "+ Dynamic Keyterms",
+        "+ Tavily Verification + Safe Correction",
+    ]
+    assert rows[0]["wer"] > rows[1]["wer"]
+    assert rows[1]["wer"] >= rows[2]["wer"]
+    assert rows[2]["wer"] == rows[3]["wer"] == 0.0
+    assert keyterm_impact_pct > 0
+
+
+def test_error_hypothesis_indices_marks_substitutions_and_insertions():
+    mod = _load_run_benchmark_module()
+
+    indices = mod._error_hypothesis_indices(
+        ["i", "take", "metformin"],
+        ["i", "take", "metfornin", "today"],
+    )
+
+    assert indices == {2, 3}
