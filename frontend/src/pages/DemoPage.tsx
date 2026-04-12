@@ -87,20 +87,9 @@ const DemoPage = () => {
 
       {/* Header bar */}
       <div className="bg-primary text-primary-foreground pt-20">
-        <div className="container mx-auto px-6 max-w-[1400px] py-4 flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-xl font-bold text-primary-foreground">CareCaller AI Demo</h1>
-          <div className="flex items-center gap-3 flex-wrap">
-            <Badge className="bg-accent text-accent-foreground rounded-pill px-4 py-1 text-sm font-semibold">
-              37% fewer errors
-            </Badge>
-            <Badge className="bg-success text-success-foreground rounded-pill px-3 py-1 text-xs font-semibold">
-              Verification Rate 100%
-            </Badge>
-            <Badge className="bg-accent text-accent-foreground rounded-pill px-3 py-1 text-xs font-semibold">
-              Unsafe Guess Rate 0%
-            </Badge>
-          </div>
-          <Button className="border border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 rounded-pill text-sm"
+        <div className="container mx-auto px-6 max-w-[1400px] py-4 flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-primary-foreground">Demo</h1>
+          <Button size="sm" className="border border-primary-foreground/20 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 rounded-md text-sm"
             onClick={() => setShowClipsModal(true)}>
             Demo Clips
           </Button>
