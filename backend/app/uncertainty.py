@@ -88,6 +88,8 @@ def score_words(
     keyterms: list[str],
     phonetic_map: dict[str, str],
     correction_history: dict[str, int],
+    *,
+    stt_provider_name: str | None = None,
 ) -> list[WordWithConfidence]:
     """Compute composite confidence per word from four signals.
 
@@ -163,6 +165,19 @@ def score_words(
         if history_hits > 0 or word_norm in phonetic_map:
             score += 0.15
             signals.append("correction_likelihood")
+
+        # 5) Fine-tuned Whisper review boost
+        # Whisper outputs can be semantically plausible while still requiring
+        # verification on medication terms, so force at least MEDIUM review on
+        # medical-shaped tokens for this provider.
+        if (
+            stt_provider_name == "fine_tuned_telephony"
+            and word_norm
+            and matches_medical(word_norm)
+            and score < 0.25
+        ):
+            score = 0.25
+            signals.append("whisper_medical_review")
 
         xgb_risk = xgb_risks[i] if i < len(xgb_risks) else None
         if xgb_risk is not None:

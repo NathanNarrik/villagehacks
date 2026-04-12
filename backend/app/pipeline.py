@@ -73,6 +73,8 @@ def _to_raw_words(
 async def _run_post_scribe(
     scribe_words: list[ScribeWord],
     base_latencies: dict[str, int],
+    *,
+    stt_provider_name: str | None = None,
 ) -> TranscribeResponse:
     latencies = dict(base_latencies)
     speakers = resolve_speakers(scribe_words)
@@ -85,13 +87,23 @@ async def _run_post_scribe(
         keyterms=keyterms,
         phonetic_map=learning_loop.get_phonetic_map(),
         correction_history=learning_loop.get_correction_history(),
+        stt_provider_name=stt_provider_name,
     )
     latencies["uncertainty"] = _ms_since(t)
 
     # ---------------- Layer 4: Tavily verification (Person B) ------------------
     t = perf_counter()
+    # Whisper fine-tuned runs can emit fewer uncertainty flags even when medical
+    # terms are present; force verification on medical-shaped tokens for parity.
+    force_verify_medical_terms = stt_provider_name == "fine_tuned_telephony"
     flagged = [
-        w for w in scored if w.confidence == "LOW" and matches_medical(w.word)
+        w
+        for w in scored
+        if matches_medical(w.word)
+        and (
+            force_verify_medical_terms
+            or w.confidence in ("LOW", "MEDIUM")
+        )
     ]
     verifier = get_verifier()
     verifications = await verifier.verify_batch(flagged)
@@ -141,7 +153,11 @@ async def run_full_pipeline(
     scribe_result = await batch_provider.transcribe_batch(cleaned_path, keyterms)
     latencies["scribe"] = _ms_since(t)
 
-    return await _run_post_scribe(scribe_result.words, latencies)
+    return await _run_post_scribe(
+        scribe_result.words,
+        latencies,
+        stt_provider_name=getattr(batch_provider, "name", None),
+    )
 
 
 async def run_pipeline_from_scribe_words(

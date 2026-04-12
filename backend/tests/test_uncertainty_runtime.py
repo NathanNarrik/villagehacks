@@ -49,3 +49,23 @@ def test_uncertainty_uses_xgboost_risk_when_available(monkeypatch):
 
     assert scored[0].confidence == "LOW"
     assert any(sig.startswith("xgboost_risk:") for sig in scored[0].uncertainty_signals)
+
+
+def test_whisper_medical_words_get_review_highlight(monkeypatch):
+    monkeypatch.setattr(
+        uncertainty._xgb_scorer,
+        "score_words",
+        lambda words, keyterms, correction_history: [None for _ in words],
+    )
+
+    words = [_w("cephalexin", 0, 100)]
+    scored = uncertainty.score_words(
+        words=words,
+        keyterms=["cephalexin"],
+        phonetic_map={},
+        correction_history={},
+        stt_provider_name="fine_tuned_telephony",
+    )
+
+    assert scored[0].confidence in ("LOW", "MEDIUM")
+    assert "whisper_medical_review" in scored[0].uncertainty_signals

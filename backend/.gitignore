@@ -13,3 +13,4 @@ test_audio/**/audio/**/*.flac
 test_audio/**/audio/**/*.ogg
 !test_audio/demo/audio/*.wav
 audio_gen/output/demo_cards_20260412/
+.tmp/

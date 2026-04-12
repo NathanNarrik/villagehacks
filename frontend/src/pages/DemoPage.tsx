@@ -191,33 +191,29 @@ type WorkspaceAudioSelection = {
   sourceKind: "demo" | "upload";
 };
 
-const STT_MODEL_OPTIONS: Array<{
-  value: SttModelOption;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "fine_tuned_telephony",
-    label: "Whisper Fine-Tuned",
-    description: "Uses the local telephony-tuned Whisper recognizer.",
-  },
-  {
-    value: "scribe_v2",
-    label: "Scribe v2 Baseline",
-    description: "Uses ElevenLabs Scribe while keeping the same downstream scoring and correction flow.",
-  },
-];
-
 const STT_MODEL_LABELS: Record<SttModelOption, string> = {
   fine_tuned_telephony: "Whisper Fine-Tuned",
   scribe_v2: "Scribe v2 Baseline",
 };
 
+const MODEL_COMPARE_ORDER: SttModelOption[] = ["fine_tuned_telephony", "scribe_v2"];
+
+type ModelRunState = {
+  status: "idle" | "running" | "done" | "error";
+  result?: TranscribeResponse;
+  error?: string;
+};
+
+const createEmptyModelRuns = (): Record<SttModelOption, ModelRunState> => ({
+  fine_tuned_telephony: { status: "idle" },
+  scribe_v2: { status: "idle" },
+});
+
 const DemoPage = () => {
-  const [result, setResult] = useState<TranscribeResponse | null>(null);
   const [stage, setStage] = useState<ProcessingStage>("idle");
-  const [selectedSttModel, setSelectedSttModel] = useState<SttModelOption>("fine_tuned_telephony");
-  const [lastRunSttModel, setLastRunSttModel] = useState<SttModelOption | null>(null);
+  const [comparisonRuns, setComparisonRuns] = useState<Record<SttModelOption, ModelRunState>>(() => createEmptyModelRuns());
+  const [activeComparisonTab, setActiveComparisonTab] = useState<SttModelOption>("fine_tuned_telephony");
+  const [runningModel, setRunningModel] = useState<SttModelOption | null>(null);
   const [selectedSituationId, setSelectedSituationId] = useState<string>(SITUATIONS[0].id);
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const [uploadedSelection, setUploadedSelection] = useState<WorkspaceAudioSelection | null>(null);
@@ -232,23 +228,64 @@ const DemoPage = () => {
 
   const resetWorkspaceState = useCallback(() => {
     setErrorMessage(null);
-    setResult(null);
+    setComparisonRuns(createEmptyModelRuns());
+    setActiveComparisonTab("fine_tuned_telephony");
+    setRunningModel(null);
     setStage("uploading");
     setAudioCurrentTime(0);
     setAudioDuration(0);
     setIsAudioPlaying(false);
   }, []);
 
+  const runComparison = useCallback(async (file: File) => {
+    let successfulRuns = 0;
+    const failures: string[] = [];
+
+    for (const model of MODEL_COMPARE_ORDER) {
+      setRunningModel(model);
+      setComparisonRuns((prev) => ({
+        ...prev,
+        [model]: { status: "running" },
+      }));
+
+      try {
+        const data = await transcribeAudio(file, model);
+        successfulRuns += 1;
+        setComparisonRuns((prev) => ({
+          ...prev,
+          [model]: { status: "done", result: data },
+        }));
+        if (successfulRuns === 1) setActiveComparisonTab(model);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Transcription failed";
+        failures.push(`${STT_MODEL_LABELS[model]}: ${message}`);
+        setComparisonRuns((prev) => ({
+          ...prev,
+          [model]: { status: "error", error: message },
+        }));
+      }
+    }
+
+    setRunningModel(null);
+
+    if (successfulRuns > 0) {
+      setStage("done");
+      setErrorMessage(null);
+      return;
+    }
+
+    setStage("error");
+    setErrorMessage(failures.join(" | ") || "Transcription failed");
+  }, []);
+
   const runUploadedFile = useCallback(async (
     file: File,
     selection: WorkspaceAudioSelection,
-    sttModel: SttModelOption,
   ) => {
     resetWorkspaceState();
     setActiveScenario(null);
     setUploadedSelection(selection);
     setWaveformPeaks(generateFallbackWaveform(selection.id));
-    setLastRunSttModel(sttModel);
 
     try {
       const loadId = ++waveformLoadIdRef.current;
@@ -256,26 +293,22 @@ const DemoPage = () => {
         if (waveformLoadIdRef.current === loadId) setWaveformPeaks(peaks);
       });
 
-      const data = await transcribeAudio(file, sttModel);
-      setResult(data);
-      setStage("done");
+      await runComparison(file);
     } catch (e) {
       setStage("error");
       setErrorMessage(e instanceof Error ? e.message : "Transcription failed");
     }
-  }, [resetWorkspaceState]);
+  }, [resetWorkspaceState, runComparison]);
 
   const runScenario = useCallback(async (
     situation: DemoSituation,
     variant: DemoVariant,
-    sttModel: SttModelOption,
   ) => {
     resetWorkspaceState();
     setUploadedSelection(null);
     setSelectedSituationId(situation.id);
     setActiveScenario(variant.id);
     setWaveformPeaks(generateFallbackWaveform(variant.id));
-    setLastRunSttModel(sttModel);
 
     try {
       const res = await fetch(variant.wav);
@@ -288,16 +321,18 @@ const DemoPage = () => {
         if (waveformLoadIdRef.current === loadId) setWaveformPeaks(peaks);
       });
       const file = new File([blob], `${variant.id}.wav`, { type: blob.type || "audio/wav" });
-      const data = await transcribeAudio(file, sttModel);
-      setResult(data);
-      setStage("done");
+      await runComparison(file);
     } catch (e) {
       setStage("error");
       setErrorMessage(e instanceof Error ? e.message : "Transcription failed");
     }
-  }, [resetWorkspaceState]);
+  }, [resetWorkspaceState, runComparison]);
 
-  const isProcessing = stage !== "idle" && stage !== "done" && stage !== "error";
+  const isProcessing = stage === "uploading";
+  const anyComparisonResult = MODEL_COMPARE_ORDER.some((model) => comparisonRuns[model].status !== "idle");
+  const activeRun = comparisonRuns[activeComparisonTab];
+  const activeResult = activeRun.result;
+  const activeRunLoading = activeRun.status === "running" || (activeRun.status === "idle" && isProcessing);
   const selectedSituation =
     SITUATIONS.find((situation) => situation.id === selectedSituationId) ?? SITUATIONS[0];
   const activeScenarioDetails =
@@ -386,8 +421,8 @@ const DemoPage = () => {
       sourceKind: "upload",
     };
 
-    await runUploadedFile(file, selection, selectedSttModel);
-  }, [runUploadedFile, selectedSttModel, uploadedSelection]);
+    await runUploadedFile(file, selection);
+  }, [runUploadedFile, uploadedSelection]);
 
   return (
     <div className="min-h-screen bg-secondary">
@@ -425,25 +460,11 @@ const DemoPage = () => {
                   Upload Audio
                 </Button>
                 <p className="mt-2 text-xs text-muted-foreground">Supports `.mp3` and `.wav` files.</p>
-                <div className="mt-4 space-y-2">
-                  <label htmlFor="stt-model-select" className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    STT Model
-                  </label>
-                  <select
-                    id="stt-model-select"
-                    value={selectedSttModel}
-                    onChange={(event) => setSelectedSttModel(event.target.value as SttModelOption)}
-                    disabled={isProcessing}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-3 text-sm text-foreground shadow-sm outline-none transition focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {STT_MODEL_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    {STT_MODEL_OPTIONS.find((option) => option.value === selectedSttModel)?.description}
+                <div className="mt-4 rounded-lg border border-border bg-secondary/60 px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Model Comparison</p>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    Each run executes both <span className="font-medium text-foreground">Whisper Fine-Tuned</span> and{" "}
+                    <span className="font-medium text-foreground">Scribe v2 Baseline</span>. Switch tabs in the workspace to compare outputs.
                   </p>
                 </div>
                 <input
@@ -495,7 +516,7 @@ const DemoPage = () => {
                         <button
                           key={variant.id}
                           type="button"
-                          onClick={() => !isProcessing && void runScenario(selectedSituation, variant, selectedSttModel)}
+                          onClick={() => !isProcessing && void runScenario(selectedSituation, variant)}
                           disabled={isProcessing}
                           className={`rounded-lg border px-3 py-3 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                             isActive
@@ -543,7 +564,7 @@ const DemoPage = () => {
                       {activeSelection.category}
                     </Badge>
                     <Badge variant="outline" className="rounded-pill">
-                      {STT_MODEL_LABELS[lastRunSttModel ?? selectedSttModel]}
+                      2-model comparison
                     </Badge>
                     <Badge variant="outline" className="rounded-pill">
                       {stage === "done" ? "Loaded" : isProcessing ? "Running" : "Ready"}
@@ -626,32 +647,75 @@ const DemoPage = () => {
               </div>
             )}
 
+            {anyComparisonResult && (
+              <div className="rounded-lg border border-border bg-card shadow-card p-3">
+                <div className="flex flex-wrap gap-2">
+                  {MODEL_COMPARE_ORDER.map((model) => {
+                    const run = comparisonRuns[model];
+                    const isActive = activeComparisonTab === model;
+                    const statusLabel =
+                      run.status === "done"
+                        ? "Loaded"
+                        : run.status === "running"
+                          ? "Running"
+                          : run.status === "error"
+                            ? "Error"
+                            : "Pending";
+
+                    return (
+                      <button
+                        key={model}
+                        type="button"
+                        onClick={() => setActiveComparisonTab(model)}
+                        disabled={run.status === "idle"}
+                        className={`rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                          isActive
+                            ? "border-accent bg-accent/10 shadow-card"
+                            : "border-border bg-background hover:border-accent/40"
+                        }`}
+                      >
+                        <p className="text-sm font-medium text-foreground">{STT_MODEL_LABELS[model]}</p>
+                        <p className="text-[11px] text-muted-foreground">{statusLabel}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {stage === "uploading" && (
               <div className="bg-card rounded-lg shadow-card p-4 flex items-center gap-3">
                 <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin shrink-0" />
                 <p className="text-sm text-foreground">
-                  Running {STT_MODEL_LABELS[lastRunSttModel ?? selectedSttModel]} on the server…
+                  Running {runningModel ? STT_MODEL_LABELS[runningModel] : "model comparison"} on the server...
                 </p>
               </div>
             )}
 
-            {(isProcessing || stage === "done") && (
+            {activeRun.status === "error" && activeRun.error && (
+              <div className="rounded-lg border border-signal-red/40 bg-signal-red/10 px-4 py-3 text-sm text-signal-red">
+                {STT_MODEL_LABELS[activeComparisonTab]} failed: {activeRun.error}
+              </div>
+            )}
+
+            {(isProcessing || anyComparisonResult) && (
               <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(340px,0.95fr)] gap-6 items-start">
                 <TranscriptPanel
                   title="Raw Transcript"
-                  loading={stage !== "done"}
-                  words={result?.raw_transcript}
+                  loading={activeRunLoading}
+                  words={activeResult?.raw_transcript}
                 />
                 <CorrectedPanel
                   title="Corrected Transcript"
-                  loading={stage !== "done"}
-                  words={result?.corrected_transcript}
-                  latency={result?.pipeline_latency_ms}
+                  loading={activeRunLoading}
+                  words={activeResult?.corrected_transcript}
+                  latency={activeResult?.pipeline_latency_ms}
+                  sttLabel={activeComparisonTab === "scribe_v2" ? "Scribe v2" : "Whisper FT"}
                 />
                 <SummaryPanel
                   className="xl:sticky xl:top-24"
-                  loading={stage !== "done"}
-                  summary={result?.clinical_summary}
+                  loading={activeRunLoading}
+                  summary={activeResult?.clinical_summary}
                 />
               </div>
             )}
@@ -727,12 +791,16 @@ const TranscriptPanel = ({ title, loading, words }: { title: string; loading: bo
   </div>
 );
 
-const CorrectedPanel = ({ title, loading, words, latency }: {
+const CorrectedPanel = ({ title, loading, words, latency, sttLabel = "STT" }: {
   title: string; loading: boolean; words?: CorrectedWord[];
   latency?: TranscribeResponse["pipeline_latency_ms"];
+  sttLabel?: string;
 }) => {
   const changedCount = words?.filter((word) => word.changed).length ?? 0;
   const unresolvedCount = words?.filter((word) => word.unverified).length ?? 0;
+  const tavilyVerifiedCount = words?.filter((word) => word.tavily_verified).length ?? 0;
+  const tavilyRan = (latency?.tavily ?? 0) > 0;
+  const fmtMs = (value: number) => (value <= 0 ? "<1" : String(value));
 
   return (
     <div className="bg-card rounded-lg shadow-card overflow-hidden min-h-[440px]">
@@ -741,7 +809,7 @@ const CorrectedPanel = ({ title, loading, words, latency }: {
           <h3 className="text-base font-bold text-primary-foreground">{title}</h3>
           {latency && (
             <p className="text-xs text-primary-foreground/60 mt-1">
-              Scribe {latency.scribe}ms + Tavily {latency.tavily}ms + Claude {latency.claude}ms = {latency.total}ms
+              {sttLabel} {fmtMs(latency.scribe)}ms + Tavily {fmtMs(latency.tavily)}ms + Claude {fmtMs(latency.claude)}ms = {fmtMs(latency.total)}ms
             </p>
           )}
         </div>
@@ -761,7 +829,11 @@ const CorrectedPanel = ({ title, loading, words, latency }: {
           <div className="space-y-3">
             {changedCount === 0 && (
               <div className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
-                No Tavily-verified corrections were used for this clip.
+                {tavilyVerifiedCount > 0
+                  ? "Tavily verified terms, but no word-level correction was needed for this clip."
+                  : tavilyRan
+                    ? "Tavily ran, but no safe word-level correction was needed for this clip."
+                    : "No eligible medical terms were sent to Tavily for this clip."}
               </div>
             )}
             <div className="leading-relaxed">
