@@ -47,8 +47,8 @@ backend/data/benchmark_results.json
 backend/data/benchmark_eval.jsonl
 
 # Audio artifacts
-backend/test_audio/**/audio/**/*.wav
-backend/test_audio/**/audio/**/*.mp3
-backend/test_audio/**/audio/**/*.m4a
-backend/test_audio/**/audio/**/*.flac
-backend/test_audio/**/audio/**/*.ogg
+# backend/test_audio/**/audio/**/*.wav
+# backend/test_audio/**/audio/**/*.mp3
+# backend/test_audio/**/audio/**/*.m4a
+# backend/test_audio/**/audio/**/*.flac
+# backend/test_audio/**/audio/**/*.ogg
