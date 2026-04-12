@@ -58,15 +58,15 @@ const BenchmarkPage = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      {/* Hero stat */}
-      <section className="pt-28 pb-16 text-center">
-        <FadeInSection>
-          <p className="text-8xl font-extrabold text-accent">{data.aggregate.avg_improvement_pct}%</p>
-          <p className="text-xl text-foreground mt-4 font-semibold">Fewer medical term errors across 20 adversarial clips</p>
-          <p className="text-sm text-muted-foreground mt-3">
-            Verification Rate: <span className="text-success font-semibold">{data.metrics.verification_rate}%</span> · Unsafe Guess Rate: <span className="text-accent font-semibold">{data.metrics.unsafe_guess_rate}%</span> · Uncertainty Coverage: <span className="text-accent font-semibold">{data.metrics.uncertainty_coverage}%</span>
+      {/* Header */}
+      <section className="pt-28 pb-10">
+        <div className="container mx-auto px-6 max-w-[900px]">
+          <h1 className="text-2xl font-bold text-foreground">Benchmark Results</h1>
+          <p className="text-sm text-muted-foreground mt-2">
+            {data.aggregate.avg_improvement_pct}% fewer medical term errors across 20 adversarial clips.
+            Verification rate {data.metrics.verification_rate}%, unsafe guess rate {data.metrics.unsafe_guess_rate}%.
           </p>
-        </FadeInSection>
+        </div>
       </section>
 
       <div className="container mx-auto px-6 max-w-[900px] pb-20">
