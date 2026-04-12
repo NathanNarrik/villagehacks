@@ -68,7 +68,7 @@ const DemoPage = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8 max-w-[1200px] mx-auto">
           {SCENARIOS.map((s) => {
             const Icon = s.icon;
             const isActive = activeScenario === s.id;
@@ -77,7 +77,7 @@ const DemoPage = () => {
                 key={s.id}
                 onClick={() => !isProcessing && void runScenario(s)}
                 disabled={isProcessing}
-                className={`text-left rounded-lg border p-4 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                className={`text-left rounded-lg border p-5 min-h-[190px] transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                   isActive
                     ? "border-accent bg-accent/5 shadow-card"
                     : "border-border bg-card hover:border-accent/50 hover:shadow-card"
