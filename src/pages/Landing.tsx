@@ -12,7 +12,7 @@ const Landing = () => {
       {/* Hero */}
       <section className="bg-primary text-primary-foreground pt-32 pb-16">
         <div className="container mx-auto px-6 max-w-[800px]">
-          <p className="text-accent text-sm font-medium tracking-wide uppercase mb-3">Verification-Augmented Speech-to-Text</p>
+          <p className="text-accent text-sm font-medium tracking-wide uppercase mb-3">ScribeShield — Verification-Augmented STT</p>
           <h1 className="text-3xl md:text-4xl font-bold leading-snug text-primary-foreground">
             Speech-to-text that knows when it might be wrong.
           </h1>
