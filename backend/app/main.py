@@ -20,13 +20,20 @@ from tempfile import NamedTemporaryFile
 from typing import Literal
 
 from anthropic import AsyncAnthropic
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from tavily import TavilyClient
 
 from . import learning_loop, pipeline, realtime, storage
 from .config import settings
-from .schemas import BenchmarkResponse, HealthResponse, StreamToken, TranscribeResponse
+from .schemas import (
+    BenchmarkResponse,
+    HealthResponse,
+    LearningLoopResponse,
+    StreamToken,
+    TranscribeResponse,
+)
+from stt.runtime import batch_provider_status, ensure_runtime_ready
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -34,10 +41,12 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ensure_runtime_ready()
     log.info(
-        "CareCaller backend starting (store=%s, model=%s)",
+        "CareCaller backend starting (store=%s, model=%s, stt=%s)",
         storage.store_backend_label(),
         settings.CLAUDE_MODEL,
+        batch_provider_status(),
     )
     yield
     log.info("CareCaller backend shutting down")
@@ -196,7 +205,10 @@ async def stream(websocket: WebSocket) -> None:
 # POST /transcribe
 # ---------------------------------------------------------------------------
 @app.post("/transcribe", response_model=TranscribeResponse)
-async def transcribe(file: UploadFile = File(...)) -> TranscribeResponse:
+async def transcribe(
+    file: UploadFile = File(...),
+    stt_model: Literal["auto", "scribe_v2", "fine_tuned_telephony"] | None = Form(None),
+) -> TranscribeResponse:
     suffix = Path(file.filename or "upload.wav").suffix or ".wav"
     tmp_path: str | None = None
     try:
@@ -204,7 +216,10 @@ async def transcribe(file: UploadFile = File(...)) -> TranscribeResponse:
             tmp.write(await file.read())
             tmp_path = tmp.name
 
-        return await pipeline.run_full_pipeline(tmp_path)
+        return await pipeline.run_full_pipeline(
+            tmp_path,
+            stt_provider_override=stt_model,
+        )
 
     except NotImplementedError as exc:
         # A Person A stub was hit. Surface the missing function name in the body.
@@ -257,6 +272,33 @@ def benchmark(
 
 
 # ---------------------------------------------------------------------------
+# GET /learning-loop
+# ---------------------------------------------------------------------------
+@app.get("/learning-loop", response_model=LearningLoopResponse)
+def learning_loop_report() -> LearningLoopResponse:
+    try:
+        from xgb.reporting import load_learning_loop_report
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"learning-loop reporting unavailable: {exc}")
+
+    payload = load_learning_loop_report()
+    has_any = bool(
+        payload.get("training_history")
+        or payload.get("retraining_snapshots")
+        or payload.get("feature_importance")
+    )
+    if not has_any:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Learning-loop artifacts not generated yet — train the XGBoost word-risk "
+                "model to produce training history, retraining snapshots, and feature importance."
+            ),
+        )
+    return LearningLoopResponse.model_validate(payload)
+
+
+# ---------------------------------------------------------------------------
 # GET /health
 # ---------------------------------------------------------------------------
 async def _ping_tavily() -> str:
@@ -295,21 +337,6 @@ async def _ping_claude() -> str:
         return f"error: {type(exc).__name__}"
 
 
-def _scribe_status() -> str:
-    """Heuristic: scribe stub raises NotImplementedError on first call. We can't
-    invoke it from /health (no audio), so we just check whether Person A's module
-    still has the stub marker."""
-    try:
-        from . import scribe
-
-        src = Path(scribe.__file__).read_text(encoding="utf-8")
-        if "NotImplementedError" in src and "Person A" in src:
-            return "stub"
-        return "ready"
-    except Exception:
-        return "unknown"
-
-
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     tavily_status, claude_status = await asyncio.gather(
@@ -318,7 +345,7 @@ async def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         redis=storage.store_backend_label(),
-        scribe=_scribe_status(),
+        scribe=batch_provider_status(),
         tavily=tavily_status,
         claude=claude_status,
         learning_loop={

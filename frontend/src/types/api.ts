@@ -1,6 +1,7 @@
 // Types matching the FastAPI backend contract
 
 export type ConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
+export type SttModelOption = "fine_tuned_telephony" | "scribe_v2";
 
 export interface RawWord {
   word: string;
@@ -114,6 +115,46 @@ export interface BenchmarkResponse {
   ablation: AblationRow[];
   metrics: BenchmarkMetrics;
   aggregate: BenchmarkAggregate;
+}
+
+export interface LearningLoopHistoryPoint {
+  round: number;
+  train_value: number;
+  validation_value?: number | null;
+}
+
+export interface LearningLoopSnapshot {
+  snapshot_index: number;
+  timestamp_utc: string;
+  clip_count: number;
+  row_count: number;
+  accuracy: number;
+  f1: number;
+  auc?: number | null;
+  best_iteration: number;
+}
+
+export interface LearningLoopFeatureImportance {
+  feature: string;
+  importance: number;
+}
+
+export interface LearningLoopSummary {
+  history_rounds: number;
+  snapshot_count: number;
+  latest_clip_count?: number | null;
+  latest_row_count?: number | null;
+  latest_accuracy?: number | null;
+  latest_f1?: number | null;
+  latest_auc?: number | null;
+}
+
+export interface LearningLoopResponse {
+  metric_name?: string | null;
+  training_history: LearningLoopHistoryPoint[];
+  retraining_snapshots: LearningLoopSnapshot[];
+  feature_importance: LearningLoopFeatureImportance[];
+  summary: LearningLoopSummary;
 }
 
 export interface HealthResponse {

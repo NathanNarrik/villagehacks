@@ -45,6 +45,7 @@ __pycache__/
 backend/data/clips/
 backend/data/benchmark_results.json
 backend/data/benchmark_eval.jsonl
+backend/stt/colab_dataset/
 
 # Audio artifacts
 # backend/test_audio/**/audio/**/*.wav
@@ -52,3 +53,12 @@ backend/data/benchmark_eval.jsonl
 # backend/test_audio/**/audio/**/*.m4a
 # backend/test_audio/**/audio/**/*.flac
 # backend/test_audio/**/audio/**/*.ogg
+
+
+backend/audio_gen/output/run_5x_v1
+backend/audio_gen/outout/run_5x_v2
+
+*.wav
+*.source
+
+backend/whisper_small_telephony_final

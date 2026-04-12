@@ -19,6 +19,7 @@ for path in (BACKEND_ROOT, REPO_ROOT):
 from app.claude_correct import reset_corrector
 from app.storage import store
 from app.tavily_verify import reset_verifier
+from stt.runtime import reset_runtime_cache
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +28,9 @@ def _reset_state():
     store.reset()
     reset_verifier()
     reset_corrector()
+    reset_runtime_cache()
     yield
     store.reset()
     reset_verifier()
     reset_corrector()
+    reset_runtime_cache()

@@ -39,7 +39,10 @@ ABSOLUTE RULES — violating any of these is a critical patient-safety failure:
 Return JSON ONLY (no prose, no markdown fences) matching this schema exactly:
 {"corrections": [{"index": int, "corrected": str, "tavily_verified": bool, "unverified": bool}]}
 
-The "index" is the integer index into the input words array. Include an entry for every word that was flagged in the input — even if you decide to keep it unchanged. For unchanged words, set corrected to the original word and tavily_verified=false, unverified=false.
+The "index" is the integer index into the input words array. Include an entry for every word that was flagged in the input.
+- If the word has a VERIFIED Tavily match and you apply it, set tavily_verified=true and unverified=false.
+- If the word has an explicit UNVERIFIED Tavily result, keep the original text and set tavily_verified=false and unverified=true.
+- If the word has no Tavily entry at all, keep the original text and set tavily_verified=false and unverified=false.
 """
 
 
@@ -173,6 +176,8 @@ class ClaudeCorrector:
         for i, raw in enumerate(raw_words):
             speaker: Any = speakers[i]
             entry = by_index.get(i)
+            verification = verifications.get(normalize(raw.word))
+            has_unverified_match = verification is not None and verification.status == "UNVERIFIED"
             if entry is None:
                 # Word wasn't flagged — pass through unchanged
                 result.append(
@@ -188,7 +193,6 @@ class ClaudeCorrector:
 
             corrected_text = str(entry.get("corrected", raw.word))
             tavily_verified = bool(entry.get("tavily_verified", False))
-            unverified = bool(entry.get("unverified", False))
             changed = normalize(corrected_text) != normalize(raw.word)
 
             # --- HALLUCINATION GUARD ---
@@ -209,7 +213,7 @@ class ClaudeCorrector:
                             word=raw.word,
                             changed=False,
                             tavily_verified=False,
-                            unverified=True,
+                            unverified=has_unverified_match,
                             speaker=speaker,
                         )
                     )
@@ -220,7 +224,7 @@ class ClaudeCorrector:
                     word=corrected_text,
                     changed=changed,
                     tavily_verified=tavily_verified and changed,
-                    unverified=unverified and not changed,
+                    unverified=has_unverified_match and not changed,
                     speaker=speaker,
                 )
             )

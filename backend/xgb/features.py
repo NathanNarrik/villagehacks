@@ -15,7 +15,6 @@ from typing import Any, Iterable, Sequence
 from app.keyterms import load_initial_keyterms
 from app.medical_patterns import matches_medical, normalize
 from app.phonetic import normalized_levenshtein
-from app.pipeline import resolve_speakers
 from app.schemas import ScribeWord
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -381,8 +380,18 @@ def nearest_keyterm_distance(word: str, keyterms: Iterable[str]) -> float:
 
 
 def resolved_speakers(words: Sequence[ScribeWord]) -> list[str]:
-    """Resolve doctor/patient labels for a word stream."""
-    return list(resolve_speakers(list(words)))
+    """Resolve doctor/patient labels using the same heuristic as app.pipeline."""
+    doctor_id: str | None = None
+    for word in words:
+        if matches_medical(word.text):
+            doctor_id = word.speaker_id
+            break
+    if doctor_id is None and words:
+        doctor_id = words[0].speaker_id
+    return [
+        "Doctor" if word.speaker_id == doctor_id else "Patient"
+        for word in words
+    ]
 
 
 def default_keyterms() -> list[str]:

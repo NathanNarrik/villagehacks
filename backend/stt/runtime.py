@@ -1,0 +1,374 @@
+"""Runtime STT provider resolution for batch transcription."""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+import wave
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Protocol
+
+from app.config import BACKEND_DIR, settings
+from app.schemas import ScribeResult, ScribeWord
+
+DEFAULT_SPEAKER_ID = "speaker_0"
+DEFAULT_MODEL_PATH = (BACKEND_DIR / "stt" / "models" / "fine_tuned_telephony").resolve()
+LEGACY_MODEL_PATH = (BACKEND_DIR / "whisper_small_telephony_final").resolve()
+_CACHE_LOCK = threading.Lock()
+_LOCAL_PIPELINE_CACHE: dict[str, Any] = {
+    "path": None,
+    "pipeline": None,
+}
+
+
+class BatchSttProvider(Protocol):
+    name: str
+
+    async def transcribe_batch(self, wav_path: str, keyterms: list[str]) -> ScribeResult: ...
+
+
+@dataclass(slots=True)
+class ModelValidation:
+    ready: bool
+    reason: str
+    path: Path
+
+
+@dataclass(slots=True)
+class ResolvedModelLocation:
+    validation: ModelValidation
+    searched_paths: tuple[Path, ...]
+
+
+def _normalize_provider_name(raw: str) -> str:
+    value = raw.strip().lower()
+    if value in {"auto", "scribe_v2", "fine_tuned_telephony"}:
+        return value
+    raise RuntimeError(
+        f"Unsupported STT_PROVIDER={raw!r}; expected auto, scribe_v2, or fine_tuned_telephony"
+    )
+
+
+def _required_model_files(path: Path) -> list[str]:
+    missing: list[str] = []
+    if not (path / "config.json").exists():
+        missing.append("config.json")
+    if not (path / "preprocessor_config.json").exists():
+        missing.append("preprocessor_config.json")
+    if not (path / "tokenizer_config.json").exists():
+        missing.append("tokenizer_config.json")
+    if not ((path / "tokenizer.json").exists() or (path / "vocab.json").exists()):
+        missing.append("tokenizer.json or vocab.json")
+    if not ((path / "model.safetensors").exists() or (path / "pytorch_model.bin").exists()):
+        missing.append("model.safetensors or pytorch_model.bin")
+    return missing
+
+
+def _validate_single_model_path(path: Path) -> ModelValidation:
+    model_path = path.expanduser().resolve()
+    if not model_path.exists():
+        return ModelValidation(
+            ready=False,
+            reason=f"missing model directory at {model_path}",
+            path=model_path,
+        )
+    if not model_path.is_dir():
+        return ModelValidation(
+            ready=False,
+            reason=f"model path is not a directory: {model_path}",
+            path=model_path,
+        )
+    missing = _required_model_files(model_path)
+    if missing:
+        return ModelValidation(
+            ready=False,
+            reason="missing required files: " + ", ".join(missing),
+            path=model_path,
+        )
+    return ModelValidation(ready=True, reason="model files present", path=model_path)
+
+
+def _configured_model_path() -> Path:
+    return settings.FINE_TUNED_STT_MODEL_PATH.expanduser().resolve()
+
+
+def candidate_local_model_paths() -> list[Path]:
+    configured = _configured_model_path()
+    candidates: list[Path] = [configured]
+    if configured == DEFAULT_MODEL_PATH and LEGACY_MODEL_PATH != configured:
+        candidates.append(LEGACY_MODEL_PATH)
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(candidate)
+    return deduped
+
+
+def resolve_local_model_location(path: Path | None = None) -> ResolvedModelLocation:
+    if path is not None:
+        validation = _validate_single_model_path(path)
+        return ResolvedModelLocation(validation=validation, searched_paths=(validation.path,))
+
+    validations = [_validate_single_model_path(candidate) for candidate in candidate_local_model_paths()]
+    ready = next((item for item in validations if item.ready), None)
+    if ready is not None:
+        return ResolvedModelLocation(
+            validation=ready,
+            searched_paths=tuple(item.path for item in validations),
+        )
+    last = validations[-1]
+    reason = "; ".join(validation.reason for validation in validations)
+    return ResolvedModelLocation(
+        validation=ModelValidation(ready=False, reason=reason, path=last.path),
+        searched_paths=tuple(item.path for item in validations),
+    )
+
+
+def validate_local_model_path(path: Path | None = None) -> ModelValidation:
+    return resolve_local_model_location(path).validation
+
+
+def _wave_duration_ms(path: Path) -> int:
+    try:
+        with wave.open(str(path), "rb") as handle:
+            rate = handle.getframerate()
+            frames = handle.getnframes()
+            if rate <= 0:
+                return 0
+            return int((frames / rate) * 1000)
+    except Exception:
+        return 0
+
+
+def _synthetic_words_from_text(text: str, *, duration_ms: int) -> list[ScribeWord]:
+    tokens = [token for token in text.split() if token.strip()]
+    if not tokens:
+        return []
+    per_word = max(80, duration_ms // max(len(tokens), 1)) if duration_ms > 0 else 120
+    out: list[ScribeWord] = []
+    cursor = 0
+    for token in tokens:
+        start = cursor
+        end = start + per_word
+        out.append(
+            ScribeWord(
+                text=token,
+                start_ms=start,
+                end_ms=end,
+                speaker_id=DEFAULT_SPEAKER_ID,
+            )
+        )
+        cursor = end + 20
+    return out
+
+
+def pipeline_words_to_scribe_words(payload: dict[str, Any], *, duration_ms: int) -> list[ScribeWord]:
+    chunks = payload.get("chunks")
+    out: list[ScribeWord] = []
+    if isinstance(chunks, list):
+        for chunk in chunks:
+            if not isinstance(chunk, dict):
+                continue
+            text = str(chunk.get("text") or "").strip()
+            timestamp = chunk.get("timestamp")
+            if not text or not isinstance(timestamp, (tuple, list)) or len(timestamp) != 2:
+                continue
+            start_raw, end_raw = timestamp
+            if start_raw is None or end_raw is None:
+                continue
+            try:
+                start_ms = max(0, int(float(start_raw) * 1000))
+                end_ms = max(start_ms, int(float(end_raw) * 1000))
+            except (TypeError, ValueError):
+                continue
+            out.append(
+                ScribeWord(
+                    text=text,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    speaker_id=DEFAULT_SPEAKER_ID,
+                )
+            )
+    if out:
+        return out
+
+    text = str(payload.get("text") or "").strip()
+    return _synthetic_words_from_text(text, duration_ms=duration_ms)
+
+
+def _torch_dtype(torch_module: Any) -> Any | None:
+    value = settings.FINE_TUNED_STT_DTYPE.strip().lower()
+    if value == "auto":
+        configured = settings.FINE_TUNED_STT_DEVICE.strip().lower()
+        if configured in {"cuda", "mps"} or (
+            configured == "auto"
+            and (
+                bool(getattr(torch_module.cuda, "is_available", lambda: False)())
+                or _mps_available(torch_module)
+            )
+        ):
+            return getattr(torch_module, "float16", None)
+        return getattr(torch_module, "float32", None)
+    if value == "float16":
+        return getattr(torch_module, "float16", None)
+    if value == "float32":
+        return getattr(torch_module, "float32", None)
+    raise RuntimeError(
+        f"Unsupported FINE_TUNED_STT_DTYPE={settings.FINE_TUNED_STT_DTYPE!r}; expected auto, float16, or float32"
+    )
+
+
+def _mps_available(torch_module: Any) -> bool:
+    backends = getattr(torch_module, "backends", None)
+    mps_backend = getattr(backends, "mps", None)
+    is_available = getattr(mps_backend, "is_available", None)
+    if callable(is_available):
+        try:
+            return bool(is_available())
+        except Exception:
+            return False
+    return False
+
+
+def _pipeline_device(torch_module: Any) -> int | str:
+    configured = settings.FINE_TUNED_STT_DEVICE.strip().lower()
+    if configured == "cpu":
+        return -1
+    if configured == "cuda":
+        return 0
+    if configured == "mps":
+        return "mps"
+    if configured != "auto":
+        raise RuntimeError(
+            f"Unsupported FINE_TUNED_STT_DEVICE={settings.FINE_TUNED_STT_DEVICE!r}; expected auto, cpu, cuda, or mps"
+        )
+    if _mps_available(torch_module):
+        return "mps"
+    return 0 if bool(getattr(torch_module.cuda, "is_available", lambda: False)()) else -1
+
+
+def _load_local_pipeline(model_path: Path) -> Any:
+    with _CACHE_LOCK:
+        if _LOCAL_PIPELINE_CACHE["path"] == str(model_path) and _LOCAL_PIPELINE_CACHE["pipeline"] is not None:
+            return _LOCAL_PIPELINE_CACHE["pipeline"]
+
+        try:
+            import torch  # type: ignore[import-not-found]
+            from transformers import pipeline  # type: ignore[import-not-found]
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                "Fine-tuned STT runtime dependencies are missing. Install torch, transformers, sentencepiece, safetensors, and librosa."
+            ) from exc
+
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model=str(model_path),
+            tokenizer=str(model_path),
+            feature_extractor=str(model_path),
+            device=_pipeline_device(torch),
+            model_kwargs={
+                "torch_dtype": _torch_dtype(torch),
+                "low_cpu_mem_usage": True,
+            },
+        )
+        _LOCAL_PIPELINE_CACHE["path"] = str(model_path)
+        _LOCAL_PIPELINE_CACHE["pipeline"] = pipe
+        return pipe
+
+
+class ScribeV2BatchProvider:
+    name = "scribe_v2"
+
+    async def transcribe_batch(self, wav_path: str, keyterms: list[str]) -> ScribeResult:
+        from app import scribe
+
+        return await scribe.transcribe_batch(wav_path, keyterms)
+
+
+class FineTunedTelephonyBatchProvider:
+    name = "fine_tuned_telephony"
+
+    def __init__(self, model_path: Path | None = None):
+        validation = resolve_local_model_location(model_path).validation
+        if not validation.ready:
+            raise RuntimeError(f"Fine-tuned STT model invalid: {validation.reason}")
+        self._model_path = validation.path
+
+    async def transcribe_batch(self, wav_path: str, keyterms: list[str]) -> ScribeResult:
+        del keyterms
+        pipe = _load_local_pipeline(self._model_path)
+        duration_ms = _wave_duration_ms(Path(wav_path))
+        generate_kwargs = {
+            "language": settings.FINE_TUNED_STT_LANGUAGE,
+            "task": settings.FINE_TUNED_STT_TASK,
+        }
+        if settings.FINE_TUNED_STT_WORD_TIMESTAMPS:
+            payload = await asyncio.to_thread(
+                pipe,
+                wav_path,
+                return_timestamps="word",
+                generate_kwargs=generate_kwargs,
+            )
+        else:
+            payload = await asyncio.to_thread(
+                pipe,
+                wav_path,
+                generate_kwargs=generate_kwargs,
+            )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected Whisper pipeline output shape")
+        words = pipeline_words_to_scribe_words(payload, duration_ms=duration_ms)
+        return ScribeResult(words=words, duration_ms=duration_ms)
+
+
+def get_batch_provider(provider_override: str | None = None) -> BatchSttProvider:
+    provider = _normalize_provider_name(provider_override or settings.STT_PROVIDER)
+    if provider == "scribe_v2":
+        return ScribeV2BatchProvider()
+    if provider == "fine_tuned_telephony":
+        return FineTunedTelephonyBatchProvider()
+
+    validation = resolve_local_model_location().validation
+    if validation.ready:
+        return FineTunedTelephonyBatchProvider(validation.path)
+    return ScribeV2BatchProvider()
+
+
+def ensure_runtime_ready() -> None:
+    provider = _normalize_provider_name(settings.STT_PROVIDER)
+    if provider != "fine_tuned_telephony":
+        return
+    local_provider = FineTunedTelephonyBatchProvider()
+    _load_local_pipeline(local_provider._model_path)
+
+
+def batch_provider_status() -> str:
+    provider = _normalize_provider_name(settings.STT_PROVIDER)
+    loaded_path = _LOCAL_PIPELINE_CACHE["path"]
+    resolved = resolve_local_model_location()
+    validation = resolved.validation
+    searched = ", ".join(str(path) for path in resolved.searched_paths)
+    if provider == "scribe_v2":
+        return "scribe_v2 (forced)"
+    if provider == "fine_tuned_telephony":
+        if validation.ready:
+            if loaded_path == str(validation.path):
+                return f"fine_tuned_telephony (forced; loaded from {validation.path})"
+            return f"fine_tuned_telephony (forced; ready at {validation.path})"
+        return f"fine_tuned_telephony (forced; invalid: {validation.reason})"
+    if validation.ready:
+        if loaded_path == str(validation.path):
+            return f"fine_tuned_telephony (auto; loaded from {validation.path})"
+        return f"fine_tuned_telephony (auto; ready at {validation.path})"
+    return f"scribe_v2 (auto fallback; searched {searched}; local model unavailable: {validation.reason})"
+
+
+def reset_runtime_cache() -> None:
+    with _CACHE_LOCK:
+        _LOCAL_PIPELINE_CACHE["path"] = None
+        _LOCAL_PIPELINE_CACHE["pipeline"] = None

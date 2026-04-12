@@ -11,8 +11,10 @@ from app.schemas import (
     ClinicalSummary,
     CorrectedWord,
     Medication,
+    PipelineLatency,
     ScribeResult,
     ScribeWord,
+    TranscribeResponse,
     VerifyResult,
     WordWithConfidence,
 )
@@ -88,6 +90,7 @@ def client(monkeypatch):
 
     monkeypatch.setattr(claude_correct, "get_corrector", lambda: FakeCorrector())
     monkeypatch.setattr(claude_extract, "get_extractor", lambda: FakeExtractor())
+    monkeypatch.setattr(main.settings, "STT_PROVIDER", "scribe_v2")
 
     return TestClient(main.app)
 
@@ -109,6 +112,39 @@ def test_transcribe_end_to_end(client):
             assert cw["tavily_verified"] is True
     assert "preprocessing" in body["pipeline_latency_ms"]
     assert "total" in body["pipeline_latency_ms"]
+
+
+def test_transcribe_passes_requested_stt_model(monkeypatch):
+    captured: dict[str, str | None] = {"stt_model": None}
+
+    async def fake_run_full_pipeline(audio_path: str, *, stt_provider_override: str | None = None):
+        del audio_path
+        captured["stt_model"] = stt_provider_override
+        return TranscribeResponse(
+            raw_transcript=[],
+            corrected_transcript=[],
+            clinical_summary=ClinicalSummary(),
+            pipeline_latency_ms=PipelineLatency(
+                preprocessing=0,
+                scribe=0,
+                uncertainty=0,
+                tavily=0,
+                claude=0,
+                total=0,
+            ),
+        )
+
+    monkeypatch.setattr(main.pipeline, "run_full_pipeline", fake_run_full_pipeline)
+
+    fresh = TestClient(main.app)
+    resp = fresh.post(
+        "/transcribe",
+        data={"stt_model": "fine_tuned_telephony"},
+        files={"file": ("test.wav", b"RIFF....fake-audio", "audio/wav")},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert captured["stt_model"] == "fine_tuned_telephony"
 
 
 def test_transcribe_returns_501_when_person_a_stub(monkeypatch):
@@ -212,12 +248,65 @@ def test_benchmark_filters_by_difficulty(monkeypatch, tmp_path):
     assert results[0]["clip_id"] == "b"
 
 
+def test_learning_loop_returns_503_when_missing():
+    fresh = TestClient(main.app)
+    resp = fresh.get("/learning-loop")
+    assert resp.status_code == 503
+
+
+def test_learning_loop_serves_report(monkeypatch):
+    monkeypatch.setattr(
+        "xgb.reporting.load_learning_loop_report",
+        lambda: {
+            "metric_name": "logloss",
+            "training_history": [
+                {"round": 0, "train_value": 0.62, "validation_value": 0.71},
+                {"round": 1, "train_value": 0.51, "validation_value": 0.6},
+            ],
+            "retraining_snapshots": [
+                {
+                    "snapshot_index": 1,
+                    "timestamp_utc": "2026-04-12T00:00:00+00:00",
+                    "clip_count": 4,
+                    "row_count": 80,
+                    "accuracy": 0.8,
+                    "f1": 0.77,
+                    "auc": 0.84,
+                    "best_iteration": 12,
+                }
+            ],
+            "feature_importance": [
+                {"feature": "cat__word_text_metformin", "importance": 0.42}
+            ],
+            "summary": {
+                "history_rounds": 2,
+                "snapshot_count": 1,
+                "latest_clip_count": 4,
+                "latest_row_count": 80,
+                "latest_accuracy": 0.8,
+                "latest_f1": 0.77,
+                "latest_auc": 0.84,
+            },
+        },
+    )
+
+    fresh = TestClient(main.app)
+    resp = fresh.get("/learning-loop")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["metric_name"] == "logloss"
+    assert len(body["training_history"]) == 2
+    assert len(body["retraining_snapshots"]) == 1
+    assert len(body["feature_importance"]) == 1
+
+
 def test_health_returns_in_memory(monkeypatch):
     async def fake_ping():
         return "not_configured"
 
     monkeypatch.setattr(main, "_ping_tavily", fake_ping)
     monkeypatch.setattr(main, "_ping_claude", fake_ping)
+    monkeypatch.setattr(main, "batch_provider_status", lambda: "scribe_v2 (forced)")
 
     fresh = TestClient(main.app)
     resp = fresh.get("/health")

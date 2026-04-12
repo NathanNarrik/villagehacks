@@ -55,12 +55,12 @@ VOICE_ROTATIONS = {
         "SAz9YHcvj6GT2YYXdXww",
     ],
     "accented": [
-        "FGY2WhTYpPnrIDTdsKH5",
-        "SAz9YHcvj6GT2YYXdXww",
-        "Xb7hH8MSUJpSbSDYk0k2",
-        "CwhRBWXzGAHq8TQ4Fs17",
-        "EXAVITQu4vr4xnSDxMaL",
-        "N2lVS1w4EtoT3dr4eOWO",
+        "oO7sLA3dWfQXsKeSAjpA",
+        "e0kBCN6KP30USsCwnSlg",
+        "vjBUjFANpoBrNUCiYC6s",
+        "SMmCzq0obKgqq4BpVwlt",
+        "a1TnjruAs5jTzdrjL8Vd",
+        "FNhoq0qHG3T8YOWzBtd6",
     ],
     "clinical": [
         "IKne3meq5aSn9XLyUdCD",

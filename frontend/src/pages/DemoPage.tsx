@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { transcribeAudio } from "@/services/api";
-import type { TranscribeResponse, ProcessingStage, RawWord, CorrectedWord } from "@/types/api";
+import type { TranscribeResponse, ProcessingStage, RawWord, CorrectedWord, SttModelOption } from "@/types/api";
 
 type DemoVariant = {
   id: string;
@@ -191,9 +191,33 @@ type WorkspaceAudioSelection = {
   sourceKind: "demo" | "upload";
 };
 
+const STT_MODEL_OPTIONS: Array<{
+  value: SttModelOption;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "fine_tuned_telephony",
+    label: "Whisper Fine-Tuned",
+    description: "Uses the local telephony-tuned Whisper recognizer.",
+  },
+  {
+    value: "scribe_v2",
+    label: "Scribe v2 Baseline",
+    description: "Uses ElevenLabs Scribe while keeping the same downstream scoring and correction flow.",
+  },
+];
+
+const STT_MODEL_LABELS: Record<SttModelOption, string> = {
+  fine_tuned_telephony: "Whisper Fine-Tuned",
+  scribe_v2: "Scribe v2 Baseline",
+};
+
 const DemoPage = () => {
   const [result, setResult] = useState<TranscribeResponse | null>(null);
   const [stage, setStage] = useState<ProcessingStage>("idle");
+  const [selectedSttModel, setSelectedSttModel] = useState<SttModelOption>("fine_tuned_telephony");
+  const [lastRunSttModel, setLastRunSttModel] = useState<SttModelOption | null>(null);
   const [selectedSituationId, setSelectedSituationId] = useState<string>(SITUATIONS[0].id);
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const [uploadedSelection, setUploadedSelection] = useState<WorkspaceAudioSelection | null>(null);
@@ -215,11 +239,16 @@ const DemoPage = () => {
     setIsAudioPlaying(false);
   }, []);
 
-  const runUploadedFile = useCallback(async (file: File, selection: WorkspaceAudioSelection) => {
+  const runUploadedFile = useCallback(async (
+    file: File,
+    selection: WorkspaceAudioSelection,
+    sttModel: SttModelOption,
+  ) => {
     resetWorkspaceState();
     setActiveScenario(null);
     setUploadedSelection(selection);
     setWaveformPeaks(generateFallbackWaveform(selection.id));
+    setLastRunSttModel(sttModel);
 
     try {
       const loadId = ++waveformLoadIdRef.current;
@@ -227,7 +256,7 @@ const DemoPage = () => {
         if (waveformLoadIdRef.current === loadId) setWaveformPeaks(peaks);
       });
 
-      const data = await transcribeAudio(file);
+      const data = await transcribeAudio(file, sttModel);
       setResult(data);
       setStage("done");
     } catch (e) {
@@ -236,12 +265,17 @@ const DemoPage = () => {
     }
   }, [resetWorkspaceState]);
 
-  const runScenario = useCallback(async (situation: DemoSituation, variant: DemoVariant) => {
+  const runScenario = useCallback(async (
+    situation: DemoSituation,
+    variant: DemoVariant,
+    sttModel: SttModelOption,
+  ) => {
     resetWorkspaceState();
     setUploadedSelection(null);
     setSelectedSituationId(situation.id);
     setActiveScenario(variant.id);
     setWaveformPeaks(generateFallbackWaveform(variant.id));
+    setLastRunSttModel(sttModel);
 
     try {
       const res = await fetch(variant.wav);
@@ -254,7 +288,7 @@ const DemoPage = () => {
         if (waveformLoadIdRef.current === loadId) setWaveformPeaks(peaks);
       });
       const file = new File([blob], `${variant.id}.wav`, { type: blob.type || "audio/wav" });
-      const data = await transcribeAudio(file);
+      const data = await transcribeAudio(file, sttModel);
       setResult(data);
       setStage("done");
     } catch (e) {
@@ -352,8 +386,8 @@ const DemoPage = () => {
       sourceKind: "upload",
     };
 
-    await runUploadedFile(file, selection);
-  }, [runUploadedFile, uploadedSelection]);
+    await runUploadedFile(file, selection, selectedSttModel);
+  }, [runUploadedFile, selectedSttModel, uploadedSelection]);
 
   return (
     <div className="min-h-screen bg-secondary">
@@ -391,6 +425,27 @@ const DemoPage = () => {
                   Upload Audio
                 </Button>
                 <p className="mt-2 text-xs text-muted-foreground">Supports `.mp3` and `.wav` files.</p>
+                <div className="mt-4 space-y-2">
+                  <label htmlFor="stt-model-select" className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    STT Model
+                  </label>
+                  <select
+                    id="stt-model-select"
+                    value={selectedSttModel}
+                    onChange={(event) => setSelectedSttModel(event.target.value as SttModelOption)}
+                    disabled={isProcessing}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-3 text-sm text-foreground shadow-sm outline-none transition focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {STT_MODEL_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {STT_MODEL_OPTIONS.find((option) => option.value === selectedSttModel)?.description}
+                  </p>
+                </div>
                 <input
                   ref={uploadInputRef}
                   type="file"
@@ -440,7 +495,7 @@ const DemoPage = () => {
                         <button
                           key={variant.id}
                           type="button"
-                          onClick={() => !isProcessing && void runScenario(selectedSituation, variant)}
+                          onClick={() => !isProcessing && void runScenario(selectedSituation, variant, selectedSttModel)}
                           disabled={isProcessing}
                           className={`rounded-lg border px-3 py-3 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                             isActive
@@ -486,6 +541,9 @@ const DemoPage = () => {
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className="rounded-pill">
                       {activeSelection.category}
+                    </Badge>
+                    <Badge variant="outline" className="rounded-pill">
+                      {STT_MODEL_LABELS[lastRunSttModel ?? selectedSttModel]}
                     </Badge>
                     <Badge variant="outline" className="rounded-pill">
                       {stage === "done" ? "Loaded" : isProcessing ? "Running" : "Ready"}
@@ -571,7 +629,9 @@ const DemoPage = () => {
             {stage === "uploading" && (
               <div className="bg-card rounded-lg shadow-card p-4 flex items-center gap-3">
                 <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin shrink-0" />
-                <p className="text-sm text-foreground">Running the full pipeline on the server…</p>
+                <p className="text-sm text-foreground">
+                  Running {STT_MODEL_LABELS[lastRunSttModel ?? selectedSttModel]} on the server…
+                </p>
               </div>
             )}
 
@@ -670,53 +730,84 @@ const TranscriptPanel = ({ title, loading, words }: { title: string; loading: bo
 const CorrectedPanel = ({ title, loading, words, latency }: {
   title: string; loading: boolean; words?: CorrectedWord[];
   latency?: TranscribeResponse["pipeline_latency_ms"];
-}) => (
-  <div className="bg-card rounded-lg shadow-card overflow-hidden min-h-[440px]">
-    <div className="bg-primary px-4 py-3">
-      <h3 className="text-base font-bold text-primary-foreground">{title}</h3>
-      {latency && (
-        <p className="text-xs text-primary-foreground/60 mt-1">
-          Scribe {latency.scribe}ms + Tavily {latency.tavily}ms + Claude {latency.claude}ms = {latency.total}ms
-        </p>
-      )}
-    </div>
-    <div className="p-4 max-h-[520px] overflow-auto">
-      {loading ? (
-        <div className="space-y-3">
-          {[...Array(6)].map((_, i) => <div key={i} className="skeleton h-4 w-full" />)}
-        </div>
-      ) : words ? (
-        <div className="leading-relaxed">
-          {words.map((w, i) => {
-            const isSpeakerLabel = w.word === "Doctor:" || w.word === "Patient:";
-            if (isSpeakerLabel) {
-              return (
-                <span key={i}>
-                  {i > 0 && <br />}
-                  <Badge className={`mr-2 mt-2 text-xs ${w.speaker === "Doctor" ? "bg-primary/20 text-primary" : "bg-success/20 text-success"}`}>
-                    {w.speaker === "Doctor" ? "Dr." : "Patient"}
-                  </Badge>
-                </span>
-              );
-            }
-            let cls = "text-sm text-foreground";
-            if (w.changed && w.tavily_verified) cls = "text-sm bg-accent/15 text-accent underline decoration-accent rounded px-0.5 font-medium";
-            else if (w.changed) cls = "text-sm bg-warning/15 text-warning rounded px-0.5";
-            else if (w.unverified) cls = "text-sm text-muted-foreground border-b border-dashed border-muted-foreground";
+}) => {
+  const changedCount = words?.filter((word) => word.changed).length ?? 0;
+  const unresolvedCount = words?.filter((word) => word.unverified).length ?? 0;
 
-            return (
-              <span key={i} className={cls}>
-                {w.word}
-                {w.unverified && <HelpCircle className="inline h-3 w-3 ml-0.5 text-muted-foreground" />}
-                {" "}
-              </span>
-            );
-          })}
+  return (
+    <div className="bg-card rounded-lg shadow-card overflow-hidden min-h-[440px]">
+      <div className="bg-primary px-4 py-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-bold text-primary-foreground">{title}</h3>
+          {latency && (
+            <p className="text-xs text-primary-foreground/60 mt-1">
+              Scribe {latency.scribe}ms + Tavily {latency.tavily}ms + Claude {latency.claude}ms = {latency.total}ms
+            </p>
+          )}
         </div>
-      ) : null}
+        {words && (
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge variant="secondary" className="text-xs">{changedCount} changes</Badge>
+            {unresolvedCount > 0 && <Badge variant="outline" className="border-primary-foreground/30 text-xs text-primary-foreground">{unresolvedCount} unresolved</Badge>}
+          </div>
+        )}
+      </div>
+      <div className="p-4 max-h-[520px] overflow-auto">
+        {loading ? (
+          <div className="space-y-3">
+            {[...Array(6)].map((_, i) => <div key={i} className="skeleton h-4 w-full" />)}
+          </div>
+        ) : words ? (
+          <div className="space-y-3">
+            {changedCount === 0 && (
+              <div className="rounded-lg border border-border bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
+                No Tavily-verified corrections were used for this clip.
+              </div>
+            )}
+            <div className="leading-relaxed">
+              {words.map((w, i) => {
+                const isSpeakerLabel = w.word === "Doctor:" || w.word === "Patient:";
+                if (isSpeakerLabel) {
+                  return (
+                    <span key={i}>
+                      {i > 0 && <br />}
+                      <Badge className={`mr-2 mt-2 text-xs ${w.speaker === "Doctor" ? "bg-primary/20 text-primary" : "bg-success/20 text-success"}`}>
+                        {w.speaker === "Doctor" ? "Dr." : "Patient"}
+                      </Badge>
+                    </span>
+                  );
+                }
+                let cls = "text-sm text-foreground";
+                if (w.changed && w.tavily_verified) cls = "text-sm bg-accent/15 text-accent underline decoration-accent rounded px-0.5 font-medium";
+                else if (w.changed) cls = "text-sm bg-warning/15 text-warning rounded px-0.5";
+                else if (w.unverified) cls = "text-sm text-muted-foreground border-b border-dashed border-muted-foreground";
+
+                return (
+                  <span key={i} className={cls}>
+                    {w.word}
+                    {w.unverified && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex align-middle">
+                            <HelpCircle className="inline h-3 w-3 ml-0.5 text-muted-foreground" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Kept unchanged because the backend could not verify a safe correction.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {" "}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const SummaryPanel = ({ loading, summary, className = "" }: {
   loading: boolean;
@@ -745,19 +836,28 @@ const SummaryPanel = ({ loading, summary, className = "" }: {
           <div>
             <h4 className="text-xs font-bold uppercase text-muted-foreground mb-2">Medications</h4>
             <div className="space-y-2">
-              {summary.medications.map((med, i) => (
-                <div key={i} className="bg-secondary rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-sm text-foreground">{med.name}</p>
-                    {med.tavily_verified
-                      ? <CheckCircle className="h-4 w-4 text-success" />
-                      : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
+              {summary.medications.map((med, i) => {
+                const metadata = [med.dosage, med.frequency, med.route].filter((value) => {
+                  const normalized = value.trim().toLowerCase();
+                  return normalized.length > 0 && normalized !== "unknown";
+                });
+
+                return (
+                  <div key={i} className="bg-secondary rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-sm text-foreground">{med.name}</p>
+                      {med.tavily_verified
+                        ? <CheckCircle className="h-4 w-4 text-success" />
+                        : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
+                    </div>
+                    {metadata.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {metadata.join(" · ")}
+                      </p>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {med.dosage} · {med.frequency} · {med.route}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

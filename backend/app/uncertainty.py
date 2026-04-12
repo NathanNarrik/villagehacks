@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import logging
 from statistics import median
-from threading import Lock
-from typing import Any
 
 from .config import settings
 from .medical_patterns import matches_medical, normalize
@@ -43,146 +41,46 @@ def _bucket(score: float) -> str:
 
 
 class _XGBoostRiskScorer:
-    """Optional runtime scorer. Falls back silently if model/deps are unavailable."""
+    """Optional runtime scorer backed by `xgb.infer`."""
 
-    def __init__(self) -> None:
-        self._loaded = False
-        self._model: Any | None = None
-        self._pd: Any | None = None
-        self._feature_names: list[str] = []
-        self._lock = Lock()
-
-    def _ensure_loaded(self) -> bool:
-        with self._lock:
-            if self._loaded:
-                return self._model is not None and self._pd is not None
-
-            self._loaded = True
-            try:
-                import joblib  # type: ignore[import-not-found]
-                import pandas as pd  # type: ignore[import-not-found]
-            except Exception:
-                return False
-
-            if not settings.XGBOOST_MODEL_PATH.exists():
-                return False
-
-            try:
-                self._model = joblib.load(settings.XGBOOST_MODEL_PATH)
-                self._pd = pd
-                self._feature_names = list(
-                    getattr(self._model, "feature_names_in_", []) or []
-                )
-                log.info(
-                    "Loaded optional XGBoost uncertainty model from %s",
-                    settings.XGBOOST_MODEL_PATH,
-                )
-            except Exception as exc:  # noqa: BLE001
-                log.warning("Failed loading XGBoost model: %s", exc)
-                self._model = None
-                self._pd = None
-                self._feature_names = []
-
-            return self._model is not None and self._pd is not None
-
-    def risk_for_word(self, features: dict[str, Any]) -> float | None:
-        if not self._ensure_loaded():
-            return None
-
-        assert self._model is not None
-        assert self._pd is not None
-
-        base = {
-            "voice_type": "unknown",
-            "speech_style": "unknown",
-            "accent": "unknown",
-            "noise_level": "unknown",
-            "scenario": "unknown",
-            "has_interruptions": 0,
-            "contains_ambiguity": 0,
-            "contains_medical_terms": 0,
-            "duration_sec_file": 0.0,
-            "rms_mean": 0.0,
-            "rms_std": 0.0,
-            "zcr_mean": 0.0,
-            "zcr_std": 0.0,
-            "centroid_mean": 0.0,
-            "centroid_std": 0.0,
-            "rolloff_mean": 0.0,
-            "rolloff_std": 0.0,
-        }
-        for i in range(1, 14):
-            base[f"mfcc_{i}_mean"] = 0.0
-            base[f"mfcc_{i}_std"] = 0.0
-        base.update(features)
-
-        # If model remembers feature names, align exactly to reduce inference drift.
-        if self._feature_names:
-            row = {name: base.get(name, 0.0) for name in self._feature_names}
-        else:
-            row = base
+    def score_words(
+        self,
+        words: list[ScribeWord],
+        keyterms: list[str],
+        correction_history: dict[str, int],
+    ) -> list[float | None]:
+        if not words:
+            return []
+        try:
+            from xgb.infer import score_transcript_words
+        except Exception:
+            return [None for _ in words]
 
         try:
-            df = self._pd.DataFrame([row])
-            if hasattr(self._model, "predict_proba"):
-                probs = self._model.predict_proba(df)[0]
-                # Generic risk proxy for non-binary models: lower confidence => higher risk.
-                max_prob = max(float(p) for p in probs) if len(probs) else 1.0
-                return max(0.0, min(1.0, 1.0 - max_prob))
+            result = score_transcript_words(
+                clip_id="runtime",
+                words=words,
+                clip_metadata={},
+                keyterms=keyterms,
+                correction_frequency=correction_history,
+                model_path=settings.XGBOOST_MODEL_PATH,
+                low_threshold=settings.XGBOOST_LOW_THRESHOLD,
+            )
         except Exception as exc:  # noqa: BLE001
             log.warning("XGBoost inference failed; falling back to rule-based: %s", exc)
-        return None
+            return [None for _ in words]
+
+        if result is None:
+            return [None for _ in words]
+
+        risks: list[float | None] = [None for _ in words]
+        for item in result.word_scores:
+            if 0 <= item.word_index < len(risks):
+                risks[item.word_index] = item.risk
+        return risks
 
 
 _xgb_scorer = _XGBoostRiskScorer()
-
-
-def _build_xgb_features(
-    words: list[ScribeWord],
-    idx: int,
-    word_norm: str,
-    keyterms_norm: set[str],
-    phonetic_map: dict[str, str],
-    correction_history: dict[str, int],
-    nearest_dist: int | None,
-) -> dict[str, Any]:
-    current = words[idx]
-    prev = words[idx - 1] if idx > 0 else None
-    nxt = words[idx + 1] if idx + 1 < len(words) else None
-
-    prev_norm = normalize(prev.text) if prev else ""
-    next_norm = normalize(nxt.text) if nxt else ""
-
-    pause_before_ms = 0
-    if prev is not None:
-        pause_before_ms = max(0, current.start_ms - prev.end_ms)
-    pause_after_ms = 0
-    if nxt is not None:
-        pause_after_ms = max(0, nxt.start_ms - current.end_ms)
-
-    duration_ms = max(0, current.end_ms - current.start_ms)
-    history_hits = int(correction_history.get(word_norm, 0))
-
-    return {
-        # Existing coarse features
-        "duration_sec_file": duration_ms / 1000.0,
-        "contains_ambiguity": int(bool(nearest_dist is not None and nearest_dist <= 2)),
-        "contains_medical_terms": int(matches_medical(word_norm)),
-        "has_interruptions": int("..." in current.text or "--" in current.text or pause_before_ms > 600),
-        # Richer transcript-context features
-        "token_char_len": len(word_norm),
-        "is_numeric_token": int(any(ch.isdigit() for ch in word_norm)),
-        "is_keyterm_exact": int(word_norm in keyterms_norm),
-        "in_phonetic_map": int(word_norm in phonetic_map),
-        "correction_history_hits": history_hits,
-        "phonetic_distance_nearest": float(nearest_dist if nearest_dist is not None else 99),
-        "pause_before_sec": pause_before_ms / 1000.0,
-        "pause_after_sec": pause_after_ms / 1000.0,
-        "context_prev_len": len(prev_norm),
-        "context_next_len": len(next_norm),
-        "context_prev_is_medical": int(matches_medical(prev_norm)),
-        "context_next_is_medical": int(matches_medical(next_norm)),
-    }
 
 
 def score_words(
@@ -213,6 +111,8 @@ def score_words(
 
     keyterms_norm = {normalize(k) for k in keyterms if k}
     durations = [max(0, w.end_ms - w.start_ms) for w in words]
+
+    xgb_risks = _xgb_scorer.score_words(words, keyterms, correction_history)
 
     out: list[WordWithConfidence] = []
     for i, w in enumerate(words):
@@ -264,18 +164,7 @@ def score_words(
             score += 0.15
             signals.append("correction_likelihood")
 
-        # Optional Phase 2: XGBoost risk scoring.
-        xgb_risk = _xgb_scorer.risk_for_word(
-            _build_xgb_features(
-                words=words,
-                idx=i,
-                word_norm=word_norm,
-                keyterms_norm=keyterms_norm,
-                phonetic_map=phonetic_map,
-                correction_history=correction_history,
-                nearest_dist=nearest_dist,
-            )
-        )
+        xgb_risk = xgb_risks[i] if i < len(xgb_risks) else None
         if xgb_risk is not None:
             # Use the more conservative signal (max risk) to reduce silent failures.
             if xgb_risk >= settings.XGBOOST_LOW_THRESHOLD:
