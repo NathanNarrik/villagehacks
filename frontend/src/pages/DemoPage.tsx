@@ -8,14 +8,14 @@ import Footer from "@/components/Footer";
 import { transcribeAudio } from "@/services/api";
 import type { TranscribeResponse, ProcessingStage, RawWord, CorrectedWord } from "@/types/api";
 
-/** Served from `frontend/public/demo-audio/` — replace with real speech clips as needed. */
+/** Canonical demo cards are generated from backend/audio_gen/input/demo_cards_20260412.csv. */
 const SCENARIOS = [
-  { id: "med-refill", wav: "/demo-audio/med-refill.wav", label: "Medication Refill", description: "Patient calling to refill metformin and lisinopril prescriptions", icon: Pill, category: "Standard" },
-  { id: "post-op", wav: "/demo-audio/post-op.wav", label: "Post-Op Follow-up", description: "Surgeon reviewing recovery progress after knee replacement", icon: Syringe, category: "Standard" },
-  { id: "symptom-check", wav: "/demo-audio/symptom-check.wav", label: "New Symptom Report", description: "Patient describing new headaches and dizziness symptoms", icon: Stethoscope, category: "Standard" },
-  { id: "allergy-review", wav: "/demo-audio/allergy-review.wav", label: "Allergy Review", description: "Nurse confirming drug allergies before administering new prescription", icon: Stethoscope, category: "Standard" },
-  { id: "adversarial-accent", wav: "/demo-audio/adversarial-accent.wav", label: "Heavy Accent + Noise", description: "Thick accent over speakerphone with background TV audio", icon: AlertTriangle, category: "Adversarial" },
-  { id: "rapid-meds", wav: "/demo-audio/rapid-meds.wav", label: "Rapid Med List", description: "Doctor rattling off 6 medications in under 15 seconds", icon: Activity, category: "Adversarial" },
+  { id: "demo_20260412_medication_refill", baseScriptId: "medication_refill", wav: "/demo-audio/med-refill.wav", label: "Medication Refill", description: "Patient calling to refill metformin and lisinopril prescriptions", icon: Pill, category: "Standard" },
+  { id: "demo_20260412_postop_followup", baseScriptId: "postop_followup", wav: "/demo-audio/post-op.wav", label: "Post-Op Follow-up", description: "Surgeon reviewing recovery progress after knee replacement", icon: Syringe, category: "Standard" },
+  { id: "demo_20260412_new_symptom_report", baseScriptId: "new_symptom_report", wav: "/demo-audio/symptom-check.wav", label: "New Symptom Report", description: "Patient describing new headaches and dizziness symptoms", icon: Stethoscope, category: "Standard" },
+  { id: "demo_20260412_allergy_review", baseScriptId: "allergy_review", wav: "/demo-audio/allergy-review.wav", label: "Allergy Review", description: "Nurse confirming drug allergies before administering new prescription", icon: Stethoscope, category: "Standard" },
+  { id: "demo_20260412_heavy_accent_noise", baseScriptId: "heavy_accent_noise", wav: "/demo-audio/adversarial-accent.wav", label: "Heavy Accent + Noise", description: "Thick accent over speakerphone with background TV audio", icon: AlertTriangle, category: "Adversarial" },
+  { id: "demo_20260412_rapid_med_list", baseScriptId: "rapid_med_list", wav: "/demo-audio/rapid-meds.wav", label: "Rapid Med List", description: "Doctor rattling off 6 medications in under 15 seconds", icon: Activity, category: "Adversarial" },
 ] as const;
 
 const DemoPage = () => {
