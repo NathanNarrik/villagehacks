@@ -14,9 +14,9 @@ The goal of this README is not to restate the pitch. It is to help the next cont
 - Core batch pipeline exists end to end in the backend: preprocessing -> Scribe batch transcription -> uncertainty scoring -> Tavily verification -> Claude correction -> Claude extraction -> learning loop.
 - Landing, demo, and benchmark pages exist in the frontend.
 - XGBoost is partially integrated as a post-Scribe risk scorer, not as a replacement for Scribe.
-- Redis persistence, full benchmark automation parity, and final demo-audio generation are still incomplete.
+- Redis persistence and full benchmark automation parity are still incomplete.
 - The supported product flow for this repo version is **demo audio clips only**.
-- The final demo audio set is **not finished yet** and remains a required work item.
+- The final demo audio set is now generated from the canonical six-row demo CSV and exported into both backend and frontend asset folders.
 
 ## Update (April 12, 2026)
 
@@ -102,8 +102,6 @@ Completed in this repo iteration:
 
 ### Still To Build
 
-- Final demo audio generation and asset cleanup.
-- Full alignment between backend demo manifests and frontend demo clip references.
 - Durable Redis-backed learning-loop and cache storage.
 - Full benchmark asset population and tighter automation around `backend/test_audio/benchmark/v1`.
 - A stronger XGBoost feature builder based on Scribe transcript output.
@@ -111,36 +109,34 @@ Completed in this repo iteration:
 
 ## Demo Audio Generation
 
-This is one of the most important unfinished items.
+This workflow is now implemented.
 
 The repo currently has three different pieces of the demo-audio story:
 
+- `backend/audio_gen/input/demo_cards_20260412.csv`
+  - canonical synthesis spec for the six shipped demo clips
 - `backend/test_audio/demo/scripts/*.txt`
-  - source scripts for demo scenarios
+  - source scripts that must stay text-identical to the canonical CSV
 - `backend/test_audio/demo/manifest.csv`
-  - intended metadata for demo assets
+  - checked-in mapping for backend demo WAVs and frontend public WAVs
 - `frontend/public/demo-audio/*.wav`
-  - the actual clip files currently used by the frontend demo page
+  - the shipped public demo assets used by the frontend demo page
 
 ### Current Reality
 
 - The frontend demo works by loading fixed `.wav` files from `frontend/public/demo-audio/`.
-- The backend demo-audio manifest and script directory exist, but they are not yet the single source of truth for the frontend demo page.
-- The final polished demo audio set has not been fully generated yet.
+- `python -m backend.audio_gen.build_demo_audio` is the repeatable command for regenerating the six shipped demo clips.
+- The wrapper validates the canonical CSV against `backend/test_audio/demo/scripts/*.txt`, generates telephony audio under `backend/audio_gen/output/demo_cards_20260412/`, and exports the shipped WAVs into both backend and frontend asset folders.
+- `backend/test_audio/demo/manifest.csv` now records the canonical clip ids, backend demo WAV paths, script references, and frontend public WAV paths.
 
-### Remaining Demo-Audio Work
+### Current Demo-Audio Contract
 
-- Generate the final polished demo audio files from the scripts in `backend/test_audio/demo/scripts/`.
-- Decide whether the source of truth should be:
-  - the frontend hardcoded scenario list
-  - `backend/test_audio/demo/manifest.csv`
-  - or a new shared manifest exported for frontend use
-- Make filenames, scenario IDs, and labels consistent between:
-  - `backend/test_audio/demo/manifest.csv`
-  - `frontend/src/pages/DemoPage.tsx`
-  - `frontend/public/demo-audio/*.wav`
-- Replace any temporary or placeholder demo clips in `frontend/public/demo-audio/` with the final generated set.
-- Keep the demo clip set intentionally small and reliable for presentation use.
+- Canonical generation spec: `backend/audio_gen/input/demo_cards_20260412.csv`
+- Canonical script text: `backend/test_audio/demo/scripts/*.txt`
+- Exported backend demo WAVs: `backend/test_audio/demo/audio/`
+- Exported frontend demo WAVs: `frontend/public/demo-audio/`
+- Checked-in mapping: `backend/test_audio/demo/manifest.csv`
+- Frontend card metadata remains hardcoded in `frontend/src/pages/DemoPage.tsx`, but the card ids now match the canonical clip ids from the demo CSV.
 
 ## Remaining Workstreams
 
@@ -155,10 +151,9 @@ The repo currently has three different pieces of the demo-audio story:
 
 ### 2. Demo Audio Pipeline
 
-- Generate final demo audios from the checked-in demo scripts.
-- Sync those generated assets into the frontend demo flow.
-- Keep script names, manifest rows, scenario IDs, and frontend labels in sync.
-- Remove ambiguity between backend demo assets and frontend demo assets.
+- Re-run `python -m backend.audio_gen.build_demo_audio` whenever the six demo scripts or canonical demo CSV change.
+- Keep the exported backend/frontend WAVs committed and aligned with the manifest after each regeneration.
+- Preserve the current friendly frontend public filenames because the live demo page depends on them.
 
 ### 3. Benchmark Pipeline
 

@@ -73,9 +73,27 @@ python -m backend.audio_gen.run \
   --resume
 ```
 
-Required environment variable:
+The generator accepts either environment variable name:
 
+- `ELEVENLABS_API_KEY`
 - `ELEVEN_LABS_API_KEY`
+
+To regenerate the shipped six demo clips and export them into both backend and frontend asset folders:
+
+```bash
+python -m backend.audio_gen.build_demo_audio
+```
+
+That wrapper reads `backend/audio_gen/input/demo_cards_20260412.csv`, validates the
+matching `backend/test_audio/demo/scripts/*.txt`, generates telephony WAVs under
+`backend/audio_gen/output/demo_cards_20260412/`, then copies the shipped files into:
+
+- `backend/test_audio/demo/audio/`
+- `frontend/public/demo-audio/`
+
+It also rewrites `backend/test_audio/demo/manifest.csv` so the checked-in demo mapping
+stays aligned with the canonical six-row demo spec.
+The demo wrapper does a clean rebuild by default; add `--resume` only when retrying a partial failure.
 
 Input requirements:
 

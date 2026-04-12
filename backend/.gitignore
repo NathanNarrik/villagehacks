@@ -11,3 +11,5 @@ test_audio/**/audio/**/*.mp3
 test_audio/**/audio/**/*.m4a
 test_audio/**/audio/**/*.flac
 test_audio/**/audio/**/*.ogg
+!test_audio/demo/audio/*.wav
+audio_gen/output/demo_cards_20260412/

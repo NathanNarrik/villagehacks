@@ -1,4 +1,7 @@
-demo_id,scenario,audio_relpath,script_ref,expected_highlights,notes
-demo_20260412_medrefill_take01,Medication Refill,audio/demo_20260412_medrefill_take01.wav,docs/demo_scripts/med_refill_v1.txt,"lisinopril; 10 mg; once daily",Clean room tone
-demo_20260412_dosage_take01,Dosage Query,audio/demo_20260412_dosage_take01.wav,docs/demo_scripts/dosage_query_v1.txt,"metformin; 500 mg; twice daily",Moderate speaking rate
-demo_20260412_noise_take01,Background Noise,audio/demo_20260412_noise_take01.wav,docs/demo_scripts/noise_case_v1.txt,"amoxicillin; 500 mg; every 8 hours",Cafe/background noise
+demo_id,scenario,audio_relpath,frontend_public_relpath,script_ref,expected_highlights,notes
+demo_20260412_medication_refill,Medication Refill,audio/demo_20260412_medication_refill_take01.wav,demo-audio/med-refill.wav,scripts/medication_refill.txt,metformin; 500 milligrams; lisinopril; 10 milligrams,"Neutral caller, clean telephony"
+demo_20260412_postop_followup,Post-Op Follow-up,audio/demo_20260412_postop_followup_take01.wav,demo-audio/post-op.wav,scripts/postop_followup.txt,ibuprofen; 600 milligrams; every 6 hours; every 16 hours,Telephony caller with moderate background noise
+demo_20260412_new_symptom_report,New Symptom Report,audio/demo_20260412_new_symptom_report_take01.wav,demo-audio/symptom-check.wav,scripts/new_symptom_report.txt,amlodipine; 10 milligrams; headaches; dizziness,"Accented speaker, clean telephony"
+demo_20260412_allergy_review,Allergy Review,audio/demo_20260412_allergy_review_take01.wav,demo-audio/allergy-review.wav,scripts/allergy_review.txt,cephalexin; lip swelling; hives; 30 minutes,Neutral caller reviewing a prior allergy reaction
+demo_20260412_heavy_accent_noise,Heavy Accent + Noise,audio/demo_20260412_heavy_accent_noise_take01.wav,demo-audio/adversarial-accent.wav,scripts/heavy_accent_noise.txt,apixaban; 2.5; 5 milligrams; chest tightness,Speakerphone accent with heavy background TV-style noise
+demo_20260412_rapid_med_list,Rapid Med List,audio/demo_20260412_rapid_med_list_take01.wav,demo-audio/rapid-meds.wav,scripts/rapid_med_list.txt,metformin; atorvastatin; levothyroxine; warfarin; insulin glargine,Fast clinical dictation with dense medication names and dosing
