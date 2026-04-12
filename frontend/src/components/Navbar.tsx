@@ -27,7 +27,7 @@ const Navbar = () => {
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-200 ${navBg}`}>
       <div className="container mx-auto flex items-center justify-between px-6 py-4 max-w-[1100px]">
         <Link to="/" className={`text-xl font-bold tracking-tight ${textColor}`}>
-          CareCaller <span className="text-accent">AI</span>
+          Scribe<span className="text-accent">Shield</span>
         </Link>
 
         {/* Desktop nav */}
