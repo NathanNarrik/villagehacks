@@ -1,0 +1,8 @@
+name: villagehacks-audio
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - pytest>=8,<9
