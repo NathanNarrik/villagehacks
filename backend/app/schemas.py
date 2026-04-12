@@ -136,6 +136,46 @@ class BenchmarkResponse(BaseModel):
     aggregate: BenchmarkAggregate
 
 
+class LearningLoopHistoryPoint(BaseModel):
+    round: int
+    train_value: float
+    validation_value: float | None = None
+
+
+class LearningLoopSnapshot(BaseModel):
+    snapshot_index: int
+    timestamp_utc: str
+    clip_count: int
+    row_count: int
+    accuracy: float
+    f1: float
+    auc: float | None = None
+    best_iteration: int
+
+
+class LearningLoopFeatureImportance(BaseModel):
+    feature: str
+    importance: float
+
+
+class LearningLoopSummary(BaseModel):
+    history_rounds: int
+    snapshot_count: int
+    latest_clip_count: int | None = None
+    latest_row_count: int | None = None
+    latest_accuracy: float | None = None
+    latest_f1: float | None = None
+    latest_auc: float | None = None
+
+
+class LearningLoopResponse(BaseModel):
+    metric_name: str | None = None
+    training_history: list[LearningLoopHistoryPoint]
+    retraining_snapshots: list[LearningLoopSnapshot]
+    feature_importance: list[LearningLoopFeatureImportance]
+    summary: LearningLoopSummary
+
+
 # ---------------------------------------------------------------------------
 # Internal pipeline dataclasses — flow between layers, not serialized to client
 # ---------------------------------------------------------------------------
@@ -149,6 +189,7 @@ class ScribeWord:
     start_ms: int
     end_ms: int
     speaker_id: str  # "speaker_0" / "speaker_1" — Person C maps to Doctor/Patient
+    confidence: float | None = None
 
 
 @dataclass

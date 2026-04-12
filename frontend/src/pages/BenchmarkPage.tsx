@@ -17,8 +17,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import FadeInSection from "@/components/FadeInSection";
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
-import { fetchBenchmark } from "@/services/api";
-import type { BenchmarkClipResult, BenchmarkResponse } from "@/types/api";
+import { fetchBenchmark, fetchLearningLoop } from "@/services/api";
+import type {
+  BenchmarkClipResult,
+  BenchmarkResponse,
+  LearningLoopResponse,
+} from "@/types/api";
 
 type SortKey = keyof BenchmarkClipResult;
 type Filter = "all" | "Standard" | "Adversarial";
@@ -50,6 +54,8 @@ const BenchmarkPage = () => {
   const [data, setData] = useState<BenchmarkResponse | null>(null);
   const [dataSource, setDataSource] = useState<"api" | "unavailable">("unavailable");
   const [benchmarkNote, setBenchmarkNote] = useState<string | null>(null);
+  const [learningLoop, setLearningLoop] = useState<LearningLoopResponse | null>(null);
+  const [learningLoopNote, setLearningLoopNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("clip_id");
@@ -92,6 +98,30 @@ const BenchmarkPage = () => {
       cancelled = true;
     };
   }, [filter]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchLearningLoop()
+      .then((payload) => {
+        if (cancelled) return;
+        setLearningLoop(payload);
+        setLearningLoopNote(null);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setLearningLoop(null);
+        setLearningLoopNote(
+          error instanceof Error
+            ? `Training-loop visuals unavailable: ${error.message}`
+            : "Training-loop visuals unavailable.",
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const normalizedResults = useMemo(
     () =>
@@ -168,6 +198,40 @@ const BenchmarkPage = () => {
         wer: row.wer_pct,
       })),
     [ablationRows],
+  );
+
+  const xgbTrainingHistory = useMemo(
+    () =>
+      (learningLoop?.training_history ?? []).map((row) => ({
+        round: row.round,
+        train: row.train_value,
+        validation: row.validation_value ?? null,
+      })),
+    [learningLoop],
+  );
+
+  const xgbSnapshotTrend = useMemo(
+    () =>
+      (learningLoop?.retraining_snapshots ?? []).map((row) => ({
+        calls: row.clip_count,
+        rows: row.row_count,
+        accuracy: row.accuracy * 100,
+        f1: row.f1 * 100,
+        auc: row.auc === null || row.auc === undefined ? null : row.auc * 100,
+      })),
+    [learningLoop],
+  );
+
+  const xgbFeatureImportance = useMemo(
+    () =>
+      (learningLoop?.feature_importance ?? [])
+        .slice(0, 10)
+        .map((row) => ({
+          feature: row.feature.replace(/^cat__|^remainder__/, ""),
+          importance: row.importance,
+        }))
+        .reverse(),
+    [learningLoop],
   );
 
   const metricCards = useMemo(() => {
@@ -514,6 +578,115 @@ const BenchmarkPage = () => {
                 />
               </LineChart>
             </ResponsiveContainer>
+          </div>
+        </FadeInSection>
+
+        <FadeInSection>
+          <div className="mb-12">
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <div>
+                <h2 className="text-2xl font-bold">XGBoost Learning Loop</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Scribe v2 feeds the transcript; the post-processor learns which words should be verified.
+                </p>
+              </div>
+              {learningLoop?.summary && (
+                <div className="grid grid-cols-3 gap-2 min-w-[280px]">
+                  <div className="rounded-md border p-3 text-center">
+                    <div className="text-lg font-semibold">
+                      {learningLoop.summary.latest_clip_count ?? "n/a"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Calls Learned</div>
+                  </div>
+                  <div className="rounded-md border p-3 text-center">
+                    <div className="text-lg font-semibold">
+                      {learningLoop.summary.latest_f1 !== null &&
+                      learningLoop.summary.latest_f1 !== undefined
+                        ? `${(learningLoop.summary.latest_f1 * 100).toFixed(1)}%`
+                        : "n/a"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Latest F1</div>
+                  </div>
+                  <div className="rounded-md border p-3 text-center">
+                    <div className="text-lg font-semibold">
+                      {learningLoop.summary.latest_auc !== null &&
+                      learningLoop.summary.latest_auc !== undefined
+                        ? `${(learningLoop.summary.latest_auc * 100).toFixed(1)}%`
+                        : "n/a"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Latest AUC</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {learningLoopNote && (
+              <div className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning mb-4">
+                {learningLoopNote}
+              </div>
+            )}
+
+            {learningLoop && (
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div className="rounded-lg border shadow-card p-4">
+                  <h3 className="text-lg font-semibold mb-1">Boosting Rounds</h3>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Training vs validation {learningLoop.metric_name ?? "metric"} over boosting rounds.
+                  </p>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={xgbTrainingHistory}>
+                        <XAxis dataKey="round" />
+                        <YAxis />
+                        <RechartsTooltip />
+                        <Line type="monotone" dataKey="train" stroke="hsl(180 100% 33%)" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="validation" stroke="hsl(15 90% 56%)" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border shadow-card p-4">
+                  <h3 className="text-lg font-semibold mb-1">Improvement Over More Calls</h3>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Retraining snapshots as corrected Scribe v2 calls are added back into the loop.
+                  </p>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={xgbSnapshotTrend}>
+                        <XAxis dataKey="calls" />
+                        <YAxis tickFormatter={(value) => `${Number(value).toFixed(0)}%`} />
+                        <RechartsTooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+                        <Line type="monotone" dataKey="accuracy" stroke="hsl(220 80% 58%)" strokeWidth={2} dot={{ r: 2 }} />
+                        <Line type="monotone" dataKey="f1" stroke="hsl(180 100% 33%)" strokeWidth={2} dot={{ r: 2 }} />
+                        <Line type="monotone" dataKey="auc" stroke="hsl(142 70% 42%)" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border shadow-card p-4 lg:col-span-2">
+                  <h3 className="text-lg font-semibold mb-1">Top Risk Features</h3>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    What the post-processor is leaning on most when deciding which words should be verified.
+                  </p>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={xgbFeatureImportance} layout="vertical" margin={{ left: 40 }}>
+                        <XAxis type="number" />
+                        <YAxis type="category" dataKey="feature" width={230} tick={{ fontSize: 11 }} />
+                        <RechartsTooltip formatter={(value: number) => value.toFixed(4)} />
+                        <Bar dataKey="importance" radius={[0, 4, 4, 0]}>
+                          {xgbFeatureImportance.map((_, index) => (
+                            <Cell key={index} fill="hsl(220 80% 58%)" />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </FadeInSection>
 

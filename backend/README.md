@@ -155,6 +155,43 @@ pytest tests
 
 Integration tests auto-skip if `ffmpeg`/`ffprobe` are unavailable.
 
+## Drop-in fine-tuned STT runtime
+
+Batch `/transcribe` can use a locally fine-tuned Whisper model when it is placed at:
+
+`backend/stt/models/fine_tuned_telephony/`
+
+Use a direct Hugging Face `save_pretrained()` export from Colab.
+
+For convenience, `STT_PROVIDER=auto` also recognizes the current backend-root drop-in
+location:
+
+`backend/whisper_small_telephony_final/`
+
+Relevant env vars:
+
+- `STT_PROVIDER=auto|scribe_v2|fine_tuned_telephony`
+- `FINE_TUNED_STT_MODEL_PATH` (optional override)
+- `FINE_TUNED_STT_LANGUAGE=english`
+- `FINE_TUNED_STT_TASK=transcribe`
+- `FINE_TUNED_STT_DEVICE=auto|cpu|cuda|mps`
+- `FINE_TUNED_STT_DTYPE=auto|float32|float16`
+- `FINE_TUNED_STT_WORD_TIMESTAMPS=false|true`
+
+Default behavior:
+
+- `auto`: use the local Whisper model if present and valid, otherwise fall back to Scribe v2
+- `fine_tuned_telephony`: require the local model at startup
+- `scribe_v2`: ignore the local model and force ElevenLabs
+
+Realtime websocket transcription remains on Scribe v2 for now.
+
+Latency note:
+
+- On Apple Silicon, leave `FINE_TUNED_STT_DEVICE=auto` or set `mps` to use the GPU.
+- `FINE_TUNED_STT_WORD_TIMESTAMPS=false` is faster and uses synthetic word timings for downstream compatibility.
+- `FINE_TUNED_STT_WORD_TIMESTAMPS=true` is slower but preserves real word timestamps when available.
+
 ## Benchmark metrics generation
 
 Generate `/benchmark` data at `backend/data/benchmark_results.json`:

@@ -7,7 +7,7 @@ import csv
 import re
 from pathlib import Path
 
-VOICE_IDS = [
+STANDARD_VOICE_IDS = [
     "CwhRBWXzGAHq8TQ4Fs17",
     "EXAVITQu4vr4xnSDxMaL",
     "FGY2WhTYpPnrIDTdsKH5",
@@ -20,9 +20,32 @@ VOICE_IDS = [
     "pNInz6obpgDQGcFmaJgB",
 ]
 
+ACCENT_VOICE_IDS = [
+    "nzeAacJi50IvxcyDnMXa",
+    "oO7sLA3dWfQXsKeSAjpA",
+    "bObiIpcSB2feMOHORpee",
+    "QZRlT5NqTgs34Uz6r1me",
+    "1gkXJMvrzBWAwt0XqBaa",
+    "OhisAd2u8Q6qSA4xXAAT",
+    "i7G4u9tyZGel56RnYhXb",
+    "Ock0AL5DBkvTUDePt4Hm",
+    "UznIBkKIQe3ZG2tGydre",
+    "CV4xD6M8z1X1kya4Pepj",
+    "LZAcK8Cx5QjdQhfBsJQZ",
+    "tlETan7Okc4pzjD0z62P",
+    "RzNYiYBiH7YrpC9QKXyc",
+    "EapdDtSsMC291mjfSNe7",
+]
+
+VOICE_POOLS = {
+    "standard": STANDARD_VOICE_IDS,
+    "accent": ACCENT_VOICE_IDS,
+}
+
 PROFILES = [
     {
         "variant_suffix": "clean",
+        "voice_pool": "standard",
         "scenario": "clean_speech",
         "scenario_group": "baseline",
         "noise_profile": "clean",
@@ -40,6 +63,7 @@ PROFILES = [
     },
     {
         "variant_suffix": "noisy_med",
+        "voice_pool": "accent",
         "scenario": "noisy_environment",
         "scenario_group": "noisy",
         "noise_profile": "medium",
@@ -47,8 +71,8 @@ PROFILES = [
         "has_interruptions": True,
         "voice_type": "telephony",
         "speech_style": "conversational",
-        "accent": "us",
-        "accent_profile": "",
+        "accent": "non_us_english",
+        "accent_profile": "mixed_non_us_english",
         "category": "triage_call",
         "difficulty": "medium",
         "split": "train",
@@ -57,6 +81,7 @@ PROFILES = [
     },
     {
         "variant_suffix": "noisy_high",
+        "voice_pool": "standard",
         "scenario": "noisy_environment",
         "scenario_group": "noisy",
         "noise_profile": "high",
@@ -74,6 +99,7 @@ PROFILES = [
     },
     {
         "variant_suffix": "accented",
+        "voice_pool": "accent",
         "scenario": "accented_speech",
         "scenario_group": "accented",
         "noise_profile": "clean",
@@ -81,8 +107,8 @@ PROFILES = [
         "has_interruptions": False,
         "voice_type": "accented",
         "speech_style": "careful",
-        "accent": "indian_english",
-        "accent_profile": "south_asian_english",
+        "accent": "non_us_english",
+        "accent_profile": "mixed_non_us_english",
         "category": "medication_question",
         "difficulty": "medium",
         "split": "train",
@@ -91,6 +117,7 @@ PROFILES = [
     },
     {
         "variant_suffix": "medical",
+        "voice_pool": "accent",
         "scenario": "medical_conversation",
         "scenario_group": "medical",
         "noise_profile": "medium",
@@ -98,8 +125,8 @@ PROFILES = [
         "has_interruptions": True,
         "voice_type": "clinical",
         "speech_style": "clinical",
-        "accent": "us",
-        "accent_profile": "",
+        "accent": "non_us_english",
+        "accent_profile": "mixed_non_us_english",
         "category": "medical_conversation",
         "difficulty": "hard",
         "split": "test",
@@ -231,6 +258,13 @@ def derive_numeric_confusion_type(text: str) -> str:
     return "digit_vs_digit"
 
 
+def voice_id_for_profile(base_idx: int, variant_idx: int, voice_pool: str) -> str:
+    pool = VOICE_POOLS.get(voice_pool)
+    if not pool:
+        raise ValueError(f"Unknown voice pool: {voice_pool}")
+    return pool[(base_idx + variant_idx - 2) % len(pool)]
+
+
 def build_rows(clips: list[str]) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
 
@@ -242,7 +276,11 @@ def build_rows(clips: list[str]) -> list[dict[str, str]]:
         contains_ambiguity = any(marker in text_lower for marker in AMBIGUITY_MARKERS)
 
         for variant_idx, profile in enumerate(PROFILES, start=1):
-            voice_id = VOICE_IDS[(base_idx + variant_idx - 2) % len(VOICE_IDS)]
+            voice_id = voice_id_for_profile(
+                base_idx=base_idx,
+                variant_idx=variant_idx,
+                voice_pool=str(profile["voice_pool"]),
+            )
             clip_id = f"clip_{base_idx:04d}_{profile['variant_suffix']}"
 
             rows.append(

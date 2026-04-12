@@ -34,7 +34,14 @@ class Settings(BaseSettings):
     STREAM_TOKEN_TTL_SEC: int = 60
     SCRIBE_REALTIME_MODEL_ID: str = "scribe_v2_realtime"
     SCRIBE_REALTIME_WS_URL: str = "wss://api.elevenlabs.io/v1/speech-to-text/realtime"
-    XGBOOST_MODEL_PATH: Path = BACKEND_DIR / "audio_gen" / "xgboost_telephony_model.joblib"
+    STT_PROVIDER: str = "auto"
+    FINE_TUNED_STT_MODEL_PATH: Path = BACKEND_DIR / "stt" / "models" / "fine_tuned_telephony"
+    FINE_TUNED_STT_LANGUAGE: str = "english"
+    FINE_TUNED_STT_TASK: str = "transcribe"
+    FINE_TUNED_STT_DEVICE: str = "auto"
+    FINE_TUNED_STT_DTYPE: str = "auto"
+    FINE_TUNED_STT_WORD_TIMESTAMPS: bool = False
+    XGBOOST_MODEL_PATH: Path = BACKEND_DIR / "xgb" / "artifacts" / "word_risk_xgb.joblib"
     XGBOOST_LOW_THRESHOLD: float = 0.60
     XGBOOST_MEDIUM_THRESHOLD: float = 0.35
 

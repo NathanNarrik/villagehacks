@@ -44,12 +44,19 @@ def _to_scribe_words(payload: dict[str, Any]) -> list[ScribeWord]:
         if end_ms < start_ms:
             end_ms = start_ms
 
+        confidence_value = item.get("confidence")
+        try:
+            confidence = float(confidence_value) if confidence_value is not None else None
+        except (TypeError, ValueError):
+            confidence = None
+
         out.append(
             ScribeWord(
                 text=text,
                 start_ms=start_ms,
                 end_ms=end_ms,
                 speaker_id=str(item.get("speaker_id") or "speaker_0"),
+                confidence=confidence,
             )
         )
 

@@ -127,3 +127,35 @@ async def test_unflagged_words_pass_through_unchanged():
     assert result[0].changed is False
     assert result[1].word == "metformin"
     assert result[1].changed is True
+
+
+@pytest.mark.asyncio
+async def test_unchanged_word_without_tavily_result_is_not_marked_unverified():
+    raw = [_wc("schedule", confidence="MEDIUM")]
+    verifications: dict[str, VerifyResult] = {}
+    payload = {
+        "corrections": [
+            {"index": 0, "corrected": "schedule", "tavily_verified": False, "unverified": True}
+        ]
+    }
+    corrector = _make_corrector(payload)
+    result = await corrector.correct(raw, verifications, speakers=["Patient"])
+    assert result[0].word == "schedule"
+    assert result[0].changed is False
+    assert result[0].unverified is False
+
+
+@pytest.mark.asyncio
+async def test_unchanged_word_with_explicit_unverified_tavily_result_stays_marked():
+    raw = [_wc("metoformin")]
+    verifications = {"metoformin": VerifyResult(original="metoformin", status="UNVERIFIED")}
+    payload = {
+        "corrections": [
+            {"index": 0, "corrected": "metoformin", "tavily_verified": False, "unverified": False}
+        ]
+    }
+    corrector = _make_corrector(payload)
+    result = await corrector.correct(raw, verifications, speakers=["Doctor"])
+    assert result[0].word == "metoformin"
+    assert result[0].changed is False
+    assert result[0].unverified is True

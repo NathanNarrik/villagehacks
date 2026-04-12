@@ -82,19 +82,20 @@ def _apply_alignment_updates(
             continue
         source_slice = source_tokens[op.src_start : op.src_end]
         target_slice = target_tokens[op.dst_start : op.dst_end]
-        if len(source_slice) != 1 or len(target_slice) != 1:
+        if len(source_slice) != len(target_slice):
             continue
-        source_token = normalize(source_slice[0])
-        target_token = normalize(target_slice[0])
-        if not source_token or not target_token or source_token == target_token:
-            continue
-        state.phonetic_map[source_token] = target_token
-        state.correction_frequency[source_token] = state.correction_frequency.get(source_token, 0) + 1
-        if matches_medical(target_token):
-            state.keyterm_counts[target_token] = state.keyterm_counts.get(target_token, 0) + 1
-        if source_token.replace(".", "", 1).isdigit() and target_token.replace(".", "", 1).isdigit():
-            key = f"{source_token}->{target_token}"
-            state.numeric_confusion_stats[key] = state.numeric_confusion_stats.get(key, 0) + 1
+        for source_raw, target_raw in zip(source_slice, target_slice, strict=False):
+            source_token = normalize(source_raw)
+            target_token = normalize(target_raw)
+            if not source_token or not target_token or source_token == target_token:
+                continue
+            state.phonetic_map[source_token] = target_token
+            state.correction_frequency[source_token] = state.correction_frequency.get(source_token, 0) + 1
+            if matches_medical(target_token):
+                state.keyterm_counts[target_token] = state.keyterm_counts.get(target_token, 0) + 1
+            if source_token.replace(".", "", 1).isdigit() and target_token.replace(".", "", 1).isdigit():
+                key = f"{source_token}->{target_token}"
+                state.numeric_confusion_stats[key] = state.numeric_confusion_stats.get(key, 0) + 1
 
 
 def update_from_corrected_call(

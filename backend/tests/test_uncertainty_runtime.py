@@ -9,7 +9,11 @@ def _w(text: str, start_ms: int, end_ms: int) -> ScribeWord:
 
 
 def test_uncertainty_rule_based_without_xgboost(monkeypatch):
-    monkeypatch.setattr(uncertainty._xgb_scorer, "risk_for_word", lambda features: None)
+    monkeypatch.setattr(
+        uncertainty._xgb_scorer,
+        "score_words",
+        lambda words, keyterms, correction_history: [None for _ in words],
+    )
 
     words = [
         _w("metoformin", 0, 120),
@@ -29,7 +33,11 @@ def test_uncertainty_rule_based_without_xgboost(monkeypatch):
 
 
 def test_uncertainty_uses_xgboost_risk_when_available(monkeypatch):
-    monkeypatch.setattr(uncertainty._xgb_scorer, "risk_for_word", lambda features: 0.81)
+    monkeypatch.setattr(
+        uncertainty._xgb_scorer,
+        "score_words",
+        lambda words, keyterms, correction_history: [0.81 for _ in words],
+    )
 
     words = [_w("hello", 0, 80)]
     scored = uncertainty.score_words(

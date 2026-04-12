@@ -1,4 +1,11 @@
-import type { TranscribeResponse, StreamToken, BenchmarkResponse, HealthResponse } from "@/types/api";
+import type {
+  TranscribeResponse,
+  StreamToken,
+  BenchmarkResponse,
+  HealthResponse,
+  LearningLoopResponse,
+  SttModelOption,
+} from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -22,9 +29,10 @@ async function readErrorMessage(res: Response): Promise<string> {
 /**
  * POST /transcribe — upload audio file, get full pipeline result
  */
-export async function transcribeAudio(file: File): Promise<TranscribeResponse> {
+export async function transcribeAudio(file: File, sttModel?: SttModelOption): Promise<TranscribeResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  if (sttModel) formData.append("stt_model", sttModel);
 
   const res = await fetch(`${API_URL}/transcribe`, {
     method: "POST",
@@ -49,6 +57,12 @@ export async function getStreamToken(): Promise<StreamToken> {
  */
 export async function fetchBenchmark(filter: "all" | "adversarial" | "standard" = "all"): Promise<BenchmarkResponse> {
   const res = await fetch(`${API_URL}/benchmark?clips=${filter}`);
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
+
+export async function fetchLearningLoop(): Promise<LearningLoopResponse> {
+  const res = await fetch(`${API_URL}/learning-loop`);
   if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }

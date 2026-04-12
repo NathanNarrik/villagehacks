@@ -23,6 +23,7 @@ from .schemas import (
     TranscribeResponse,
     WordWithConfidence,
 )
+from stt.runtime import get_batch_provider
 from .tavily_verify import get_verifier
 
 log = logging.getLogger(__name__)
@@ -121,7 +122,11 @@ async def _run_post_scribe(
     )
 
 
-async def run_full_pipeline(audio_path: str) -> TranscribeResponse:
+async def run_full_pipeline(
+    audio_path: str,
+    *,
+    stt_provider_override: str | None = None,
+) -> TranscribeResponse:
     latencies: dict[str, int] = {}
 
     # ---------------- Layer 1: ffmpeg preprocessing (Person A) ----------------
@@ -129,10 +134,11 @@ async def run_full_pipeline(audio_path: str) -> TranscribeResponse:
     cleaned_path = await preprocessing.preprocess(audio_path)
     latencies["preprocessing"] = _ms_since(t)
 
-    # ---------------- Layer 2: Scribe v2 batch (Person A) ----------------------
+    # ---------------- Layer 2: batch STT provider -------------------------------
     t = perf_counter()
     keyterms = learning_loop.get_keyterms(top_n=100)
-    scribe_result = await scribe.transcribe_batch(cleaned_path, keyterms)
+    batch_provider = get_batch_provider(stt_provider_override)
+    scribe_result = await batch_provider.transcribe_batch(cleaned_path, keyterms)
     latencies["scribe"] = _ms_since(t)
 
     return await _run_post_scribe(scribe_result.words, latencies)
