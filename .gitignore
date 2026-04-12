@@ -30,4 +30,3 @@ __pycache__/
 *.py[cod]
 
 *.wav
-*.source
