@@ -111,30 +111,28 @@ const BenchmarkPage = () => {
           </div>
         </FadeInSection>
 
-        {/* New Metrics Cards */}
-        <FadeInSection>
-          <h2 className="text-2xl font-bold mb-6">Key Metrics</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
+        {/* Key Metrics */}
+        <div className="mb-12">
+          <h2 className="text-lg font-semibold mb-4">Key Metrics</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: "Verification Rate", value: `${data.metrics.verification_rate}%`, color: "text-success", tip: "Percentage of corrections backed by Tavily confirmation" },
-              { label: "Unsafe Guess Rate", value: `${data.metrics.unsafe_guess_rate}%`, color: "text-accent", tip: "Percentage of corrections made without verification" },
-              { label: "Uncertainty Coverage", value: `${data.metrics.uncertainty_coverage}%`, color: "text-accent", tip: "Low-confidence words correctly flagged before correction" },
-              { label: "Phonetic Hit Rate", value: `${data.metrics.phonetic_hit_rate}%`, color: "text-accent", tip: "Phonetically-close drug name misspellings caught by Layer 3" },
+              { label: "Verification Rate", value: `${data.metrics.verification_rate}%`, tip: "Corrections backed by Tavily confirmation" },
+              { label: "Unsafe Guess Rate", value: `${data.metrics.unsafe_guess_rate}%`, tip: "Corrections made without verification" },
+              { label: "Uncertainty Coverage", value: `${data.metrics.uncertainty_coverage}%`, tip: "Low-confidence words correctly flagged" },
+              { label: "Phonetic Hit Rate", value: `${data.metrics.phonetic_hit_rate}%`, tip: "Drug name misspellings caught" },
             ].map((m) => (
               <Tooltip key={m.label}>
                 <TooltipTrigger asChild>
-                  <div className="bg-card rounded-lg p-4 shadow-card text-center cursor-default hover:shadow-hover transition-shadow">
-                    <p className={`text-3xl font-extrabold ${m.color}`}>{m.value}</p>
-                    <p className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1">
-                      {m.label} <Info className="h-3 w-3" />
-                    </p>
+                  <div className="border rounded-md p-3 text-center cursor-default">
+                    <p className="text-lg font-semibold text-foreground">{m.value}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{m.label}</p>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent><p className="text-xs max-w-[200px]">{m.tip}</p></TooltipContent>
               </Tooltip>
             ))}
           </div>
-        </FadeInSection>
+        </div>
 
         {/* Per-clip results */}
         <FadeInSection>
