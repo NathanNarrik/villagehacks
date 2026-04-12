@@ -132,3 +132,27 @@ pytest tests
 ```
 
 Integration tests auto-skip if `ffmpeg`/`ffprobe` are unavailable.
+
+## Benchmark metrics generation
+
+Generate `/benchmark` data at `backend/data/benchmark_results.json`:
+
+```bash
+python backend/scripts/run_benchmark.py
+```
+
+For recomputed WER/CER, digit-level accuracy, and medical keyword accuracy, provide
+`backend/data/benchmark_eval.jsonl` rows with:
+
+- `clip_id`
+- `ground_truth` (or `reference_text` / `text`)
+- `raw_text` (or `raw_transcript`)
+- `corrected_text` (or `corrected_transcript`)
+
+Optional fields:
+
+- `category`
+- `difficulty` (`Standard` or `Adversarial`)
+- `medical_keywords` (list or comma-delimited string)
+
+Reference format: `backend/data/benchmark_eval.jsonl.example`.

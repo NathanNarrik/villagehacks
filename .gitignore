@@ -44,5 +44,6 @@ __pycache__/
 # Backend data artifacts
 backend/data/clips/
 backend/data/benchmark_results.json
+backend/data/benchmark_eval.jsonl
 
 # Audio artifacts

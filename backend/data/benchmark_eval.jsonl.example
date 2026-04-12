@@ -1,0 +1,2 @@
+{"clip_id":"std_001","category":"Cardiovascular","difficulty":"Standard","ground_truth":"I take lisinopril 10 milligrams once daily","raw_text":"I take lisonopril 10 milligrams once daily","corrected_text":"I take lisinopril 10 milligrams once daily","medical_keywords":["lisinopril"]}
+{"clip_id":"adv_002","category":"Antibiotics","difficulty":"Adversarial","ground_truth":"I took amoxicillin 500 mg every 8 hours","raw_text":"I took amoxycillin 500 mg every 18 hours","corrected_text":"I took amoxicillin 500 mg every 8 hours","medical_keywords":["amoxicillin"]}

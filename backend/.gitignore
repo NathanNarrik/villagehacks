@@ -5,3 +5,4 @@ __pycache__/
 .pytest_cache/
 data/clips/
 data/benchmark_results.json
+data/benchmark_eval.jsonl

@@ -6,6 +6,12 @@
       "difficulty": "Standard",
       "raw_wer": 0.082,
       "corrected_wer": 0.018,
+      "raw_cer": 0.039,
+      "corrected_cer": 0.011,
+      "raw_digit_accuracy": 0.8,
+      "corrected_digit_accuracy": 1.0,
+      "raw_medical_keyword_accuracy": 0.75,
+      "corrected_medical_keyword_accuracy": 1.0,
       "improvement_pct": 78.0
     },
     {
@@ -14,6 +20,12 @@
       "difficulty": "Standard",
       "raw_wer": 0.071,
       "corrected_wer": 0.015,
+      "raw_cer": 0.034,
+      "corrected_cer": 0.009,
+      "raw_digit_accuracy": 0.67,
+      "corrected_digit_accuracy": 1.0,
+      "raw_medical_keyword_accuracy": 0.8,
+      "corrected_medical_keyword_accuracy": 1.0,
       "improvement_pct": 78.9
     },
     {
@@ -22,6 +34,12 @@
       "difficulty": "Adversarial",
       "raw_wer": 0.213,
       "corrected_wer": 0.041,
+      "raw_cer": 0.108,
+      "corrected_cer": 0.029,
+      "raw_digit_accuracy": 0.5,
+      "corrected_digit_accuracy": 0.83,
+      "raw_medical_keyword_accuracy": 0.6,
+      "corrected_medical_keyword_accuracy": 0.9,
       "improvement_pct": 80.8
     },
     {
@@ -30,6 +48,12 @@
       "difficulty": "Adversarial",
       "raw_wer": 0.198,
       "corrected_wer": 0.052,
+      "raw_cer": 0.096,
+      "corrected_cer": 0.031,
+      "raw_digit_accuracy": 0.6,
+      "corrected_digit_accuracy": 0.8,
+      "raw_medical_keyword_accuracy": 0.67,
+      "corrected_medical_keyword_accuracy": 0.89,
       "improvement_pct": 73.7
     }
   ],
@@ -69,11 +93,19 @@
     "verification_rate": 0.94,
     "unsafe_guess_rate": 0.0,
     "uncertainty_coverage": 0.88,
-    "phonetic_hit_rate": 0.71
+    "phonetic_hit_rate": 0.71,
+    "digit_accuracy_coverage": 0.75,
+    "medical_keyword_accuracy_coverage": 1.0
   },
   "aggregate": {
     "avg_raw_wer": 0.141,
     "avg_corrected_wer": 0.032,
+    "avg_raw_cer": 0.0693,
+    "avg_corrected_cer": 0.02,
+    "avg_raw_digit_accuracy": 0.6425,
+    "avg_corrected_digit_accuracy": 0.9075,
+    "avg_raw_medical_keyword_accuracy": 0.705,
+    "avg_corrected_medical_keyword_accuracy": 0.9475,
     "avg_improvement_pct": 77.3,
     "keyterm_impact_pct": 34.8
   }
