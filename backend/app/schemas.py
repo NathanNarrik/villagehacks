@@ -75,6 +75,13 @@ class HealthResponse(BaseModel):
     scribe: str
     tavily: str
     claude: str
+    learning_loop: dict[str, int] | None = None
+    realtime: str | None = None
+
+
+class StreamToken(BaseModel):
+    token: str
+    expires_in: int
 
 
 # Benchmark response — passed through from cached JSON, validated loosely

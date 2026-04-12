@@ -46,4 +46,3 @@ backend/data/clips/
 backend/data/benchmark_results.json
 
 # Audio artifacts
-*.wav

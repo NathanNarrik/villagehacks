@@ -22,4 +22,69 @@ def load_initial_keyterms() -> list[str]:
 
     Pulled into Scribe v2's `keywords` parameter on first call.
     """
-    raise NotImplementedError("keyterms.load_initial_keyterms — Person A: see HANDOFF_PERSON_A.md")
+    return [
+        # Cardiovascular
+        "lisinopril",
+        "atorvastatin",
+        "amlodipine",
+        "metoprolol",
+        "losartan",
+        "hydrochlorothiazide",
+        "clopidogrel",
+        "warfarin",
+        "apixaban",
+        "aspirin",
+        # Diabetes / endocrine
+        "metformin",
+        "insulin",
+        "glipizide",
+        "sitagliptin",
+        "semaglutide",
+        "empagliflozin",
+        "glyburide",
+        "levothyroxine",
+        # Mental health / neuro
+        "sertraline",
+        "escitalopram",
+        "bupropion",
+        "fluoxetine",
+        "duloxetine",
+        "venlafaxine",
+        "gabapentin",
+        "pregabalin",
+        # Pain / inflammation
+        "ibuprofen",
+        "acetaminophen",
+        "tramadol",
+        "naproxen",
+        "meloxicam",
+        "diclofenac",
+        "celecoxib",
+        # Antibiotics / anti-infectives
+        "amoxicillin",
+        "azithromycin",
+        "doxycycline",
+        "ciprofloxacin",
+        "cephalexin",
+        "clindamycin",
+        "metronidazole",
+        # GI / reflux
+        "omeprazole",
+        "pantoprazole",
+        "ranitidine",
+        "famotidine",
+        "ondansetron",
+        # Respiratory / allergy
+        "albuterol",
+        "montelukast",
+        "fluticasone",
+        "cetirizine",
+        "loratadine",
+        # Common medical terms / routes / frequencies
+        "milligrams",
+        "micrograms",
+        "twice daily",
+        "once daily",
+        "oral",
+        "intravenous",
+    ]
