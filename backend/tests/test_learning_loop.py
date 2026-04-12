@@ -77,5 +77,10 @@ def test_unverified_corrections_dont_pollute_keyterms():
 
     learning_loop.record_call(raw, corrected, verifications)
 
-    assert learning_loop.get_keyterms(top_n=10) == []
+    # Learned sorted-set stays empty — nothing verified to persist.
+    assert learning_loop.keyterm_count() == 0
     assert learning_loop.get_phonetic_map() == {}
+    # `get_keyterms` still returns Person A's seed list when the store is empty (Scribe keywords).
+    seeded = learning_loop.get_keyterms(top_n=500)
+    assert "xyzabc" not in {k.lower() for k in seeded}
+    assert len(seeded) >= 10

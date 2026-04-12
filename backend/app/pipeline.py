@@ -69,26 +69,18 @@ def _to_raw_words(
     return out
 
 
-async def run_full_pipeline(audio_path: str) -> TranscribeResponse:
-    latencies: dict[str, int] = {}
-
-    # ---------------- Layer 1: ffmpeg preprocessing (Person A) ----------------
-    t = perf_counter()
-    cleaned_path = await preprocessing.preprocess(audio_path)
-    latencies["preprocessing"] = _ms_since(t)
-
-    # ---------------- Layer 2: Scribe v2 batch (Person A) ----------------------
-    t = perf_counter()
+async def _run_post_scribe(
+    scribe_words: list[ScribeWord],
+    base_latencies: dict[str, int],
+) -> TranscribeResponse:
+    latencies = dict(base_latencies)
+    speakers = resolve_speakers(scribe_words)
     keyterms = learning_loop.get_keyterms(top_n=100)
-    scribe_result = await scribe.transcribe_batch(cleaned_path, keyterms)
-    latencies["scribe"] = _ms_since(t)
-
-    speakers = resolve_speakers(scribe_result.words)
 
     # ---------------- Layer 3: uncertainty scoring (Person A) ------------------
     t = perf_counter()
     scored = uncertainty.score_words(
-        words=scribe_result.words,
+        words=scribe_words,
         keyterms=keyterms,
         phonetic_map=learning_loop.get_phonetic_map(),
         correction_history=learning_loop.get_correction_history(),
@@ -127,3 +119,33 @@ async def run_full_pipeline(audio_path: str) -> TranscribeResponse:
         clinical_summary=summary,
         pipeline_latency_ms=PipelineLatency(**latencies),
     )
+
+
+async def run_full_pipeline(audio_path: str) -> TranscribeResponse:
+    latencies: dict[str, int] = {}
+
+    # ---------------- Layer 1: ffmpeg preprocessing (Person A) ----------------
+    t = perf_counter()
+    cleaned_path = await preprocessing.preprocess(audio_path)
+    latencies["preprocessing"] = _ms_since(t)
+
+    # ---------------- Layer 2: Scribe v2 batch (Person A) ----------------------
+    t = perf_counter()
+    keyterms = learning_loop.get_keyterms(top_n=100)
+    scribe_result = await scribe.transcribe_batch(cleaned_path, keyterms)
+    latencies["scribe"] = _ms_since(t)
+
+    return await _run_post_scribe(scribe_result.words, latencies)
+
+
+async def run_pipeline_from_scribe_words(
+    words: list[ScribeWord],
+    *,
+    scribe_latency_ms: int = 0,
+) -> TranscribeResponse:
+    """Run layers 3-7 from already-transcribed Scribe words (realtime path)."""
+    base_latencies = {
+        "preprocessing": 0,
+        "scribe": max(0, int(scribe_latency_ms)),
+    }
+    return await _run_post_scribe(words, base_latencies)

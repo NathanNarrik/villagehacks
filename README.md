@@ -1,9 +1,6 @@
 # CareCaller AI — Backend
 
-FastAPI backend for the CareCaller AI verification-augmented STT pipeline. Implements
-**Person B (AI/NLP)** and **Person C (Backend)** end-to-end. Person A's modules
-(audio preprocessing, ElevenLabs Scribe v2, uncertainty scoring, keyterms,
-benchmark generation) live as stubs — see `HANDOFF_PERSON_A.md`.
+FastAPI backend for the CareCaller AI verification-augmented STT pipeline.
 
 ## Full stack (frontend + backend)
 
@@ -32,6 +29,16 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
 Then set `VITE_API_URL=http://127.0.0.1:8001` in `frontend/.env` and restart `npm run dev`. To see excluded ranges: `netsh interface ipv4 show excludedportrange protocol=tcp` (PowerShell as Admin).
+
+**Windows: `ffmpeg` / `ffprobe` not found** — Preprocessing shells out to **ffmpeg** and **ffprobe**. Install them and ensure they are on `PATH`, then **restart the terminal** (and Uvicorn).
+
+```powershell
+winget install --id Gyan.FFmpeg -e
+```
+
+After install, confirm in a **new** PowerShell window: `ffmpeg -version` and `ffprobe -version`. If `winget` is unavailable, use [ffmpeg.org](https://ffmpeg.org/download.html) builds and add the `bin` folder to your user or system PATH.
+
+If the error persists while running Uvicorn **from Cursor/VS Code**, the IDE often inherits an old `PATH`. The backend now also searches common Windows install dirs (including WinGet’s `Links` folder). As a last resort, set **`FFMPEG_PATH`** (and optionally **`FFPROBE_PATH`**) in `backend/.env` to the full paths of `ffmpeg.exe` / `ffprobe.exe` — see `backend/.env.example`.
 
 **Terminal 2 — frontend**
 
@@ -74,27 +81,27 @@ Point any client at the same URL you pass to Uvicorn (e.g. `http://127.0.0.1:800
    - `ANTHROPIC_API_KEY` — for Claude correction + extraction (Person B)
    - `TAVILY_API_KEY` — for medical-term verification (Person B)
    - `ELEVENLABS_API_KEY` — for Scribe v2 transcription (Person A's module)
-2. **Hand `HANDOFF_PERSON_A.md` to Person A.** They implement 5 functions and
-   produce one JSON file. Until then, `/transcribe` returns 501 with the missing
-   module's name in the body — everything else (`/health`, `/benchmark` 503) works.
+2. Ensure `backend/data/benchmark_results.json` exists (included in this repo).
 
 ## Endpoints
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/transcribe` | multipart `file=<audio>`. Returns `TranscribeResponse`. 501 until Person A's stubs are filled in. |
-| GET  | `/benchmark?clips=all\|adversarial\|standard` | Serves `data/benchmark_results.json`. 503 if Person A hasn't generated it yet. |
-| GET  | `/health` | Reachability check for Tavily + Claude. `redis: "in-memory"` (no Redis in this build). |
+| POST | `/transcribe` | multipart `file=<audio>`. Runs full batch pipeline. |
+| GET  | `/stream/token` | Returns single-use token for websocket auth (`expires_in=60`). |
+| WS   | `/stream?token=...` | Realtime Scribe relay. Emits `partial`, `committed`, `correction`, `error` events. |
+| GET  | `/benchmark?clips=all\|adversarial\|standard` | Serves benchmark JSON from `data/benchmark_results.json`. |
+| GET  | `/health` | Reachability + runtime status (including learning loop stats + realtime dependency status). |
 
 ## Architecture (7 layers)
 
-1. **preprocessing** — ffmpeg loudnorm + denoise [Person A stub]
-2. **scribe** — ElevenLabs Scribe v2 batch with keyterms [Person A stub]
-3. **uncertainty** — multi-signal confidence scoring [Person A stub]
+1. **preprocessing** — ffmpeg loudnorm + denoise
+2. **scribe** — ElevenLabs Scribe v2 batch with keyterms
+3. **uncertainty** — multi-signal confidence scoring (+ optional XGBoost risk signal)
 4. **tavily_verify** — confidence-gated medical verification (cap=5/transcript, deduped, cached)
 5. **claude_correct** — safe correction with hallucination guard
 6. **claude_extract** — clinical entity extraction
-7. **learning_loop** — phonetic map + correction history + adaptive keyterms (in-memory)
+7. **learning_loop** — phonetic map + correction history + adaptive keyterms (in-memory store, Redis-compatible API)
 
 The hallucination guard in `claude_correct.py` reverts any "changed" word that
 isn't backed by a Tavily-verified canonical match — this is what powers the
@@ -102,10 +109,8 @@ isn't backed by a Tavily-verified canonical match — this is what powers the
 
 ## Storage
 
-In-memory only. `InMemoryStore` in `app/storage.py` mimics a small Redis subset
-(string TTL, hash, sorted set). Single-process, resets on restart. Acceptable for
-the hackathon demo where the "improves with each call" pitch only needs
-within-process memory.
+Default storage is in-memory (`InMemoryStore` in `app/storage.py`), which mirrors a
+small Redis subset (string TTL, hash, sorted set) for straightforward Redis swap-in.
 
 ## Tests
 
