@@ -14,6 +14,8 @@ try:
 except Exception:  # pragma: no cover - fallback import style for alternate runners
     from backend.audio_preprocess.pipeline import preprocess_for_scribe  # type: ignore[no-redef]
 
+from .config import settings
+
 
 async def preprocess(input_path: str) -> str:
     """Run loudnorm → afftdn → 16kHz mono PCM WAV. Return path to cleaned WAV.
@@ -29,11 +31,14 @@ async def preprocess(input_path: str) -> str:
     working_dir = Path(gettempdir()) / "carecaller_preprocessed"
     working_dir.mkdir(parents=True, exist_ok=True)
 
+    ff, fp = settings.ffmpeg_ffprobe_explicit()
     result = await asyncio.to_thread(
         preprocess_for_scribe,
         input_path=input_path,
         output_dir=working_dir,
         job_id=f"call_{uuid.uuid4().hex[:10]}",
         timeout_s=120,
+        ffmpeg_bin=ff,
+        ffprobe_bin=fp,
     )
     return str(result.output_path)

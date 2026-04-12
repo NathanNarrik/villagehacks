@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, ArrowUpDown, Info } from "lucide-react";
@@ -8,7 +8,8 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FadeInSection from "@/components/FadeInSection";
 import { MOCK_BENCHMARK } from "@/services/mockData";
-import type { BenchmarkClipResult } from "@/types/api";
+import { fetchBenchmark } from "@/services/api";
+import type { BenchmarkClipResult, BenchmarkResponse } from "@/types/api";
 
 type SortKey = keyof BenchmarkClipResult;
 type Filter = "all" | "Standard" | "Adversarial";
@@ -20,10 +21,38 @@ const learningLoopData = Array.from({ length: 20 }, (_, i) => ({
 }));
 
 const BenchmarkPage = () => {
-  const data = MOCK_BENCHMARK;
+  const [data, setData] = useState<BenchmarkResponse>(MOCK_BENCHMARK);
+  const [dataSource, setDataSource] = useState<"api" | "mock">("mock");
+  const [benchmarkNote, setBenchmarkNote] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("clip_id");
   const [sortAsc, setSortAsc] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const clips =
+      filter === "all" ? ("all" as const) : filter === "Adversarial" ? ("adversarial" as const) : ("standard" as const);
+    fetchBenchmark(clips)
+      .then((d) => {
+        if (!cancelled) {
+          setData(d);
+          setDataSource("api");
+          setBenchmarkNote(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setData(MOCK_BENCHMARK);
+          setDataSource("mock");
+          setBenchmarkNote(
+            "Live benchmark data is unavailable (backend off or results not generated). Showing embedded sample data.",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filter]);
 
   const filtered = useMemo(() => {
     let rows = filter === "all" ? data.results : data.results.filter(r => r.difficulty === filter);
@@ -60,7 +89,17 @@ const BenchmarkPage = () => {
 
       {/* Header */}
       <section className="pt-28 pb-10">
-        <div className="container mx-auto px-6 max-w-[900px]">
+        <div className="container mx-auto px-6 max-w-[900px] space-y-3">
+          {benchmarkNote && (
+            <div className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-sm text-warning">
+              {benchmarkNote}
+            </div>
+          )}
+          {dataSource === "api" && !benchmarkNote && (
+            <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-xs text-success">
+              Showing benchmark results from the API ({import.meta.env.VITE_API_URL || "VITE_API_URL"})
+            </div>
+          )}
           <h1 className="text-2xl font-bold text-foreground">Benchmark Results</h1>
           <p className="text-sm text-muted-foreground mt-2">
             {data.aggregate.avg_improvement_pct}% fewer medical term errors across 20 adversarial clips.

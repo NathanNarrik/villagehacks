@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 from time import perf_counter
@@ -28,13 +30,46 @@ FILTER_CHAIN = "loudnorm=I=-16:LRA=11:TP=-1.5,afftdn=nf=-25,aresample=16000:resa
 FALLBACK_FILTER_CHAIN = "loudnorm=I=-16:LRA=11:TP=-1.5,afftdn=nf=-25,aresample=16000"
 
 
-def _resolve_binary(binary_name: str) -> str:
+def _windows_binary_candidates(binary_name: str) -> list[Path]:
+    """Common install locations when PATH is stale (e.g. IDE-started Uvicorn)."""
+    exe = f"{binary_name}.exe"
+    out: list[Path] = []
+    pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+    pfx86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    local = os.environ.get("LOCALAPPDATA", "")
+    for root in (
+        Path(pf) / "ffmpeg" / "bin",
+        Path(pfx86) / "ffmpeg" / "bin",
+        Path(local) / "Microsoft" / "WinGet" / "Links",
+    ):
+        if root and (root / exe).is_file():
+            out.append(root / exe)
+    return out
+
+
+def _resolve_binary(binary_name: str, *, explicit: str | None = None) -> str:
+    """Resolve ffmpeg/ffprobe: optional full path from settings, then PATH, then Windows defaults."""
+    if explicit:
+        exp = Path(explicit).expanduser()
+        if exp.is_file():
+            return str(exp.resolve())
+        which_explicit = shutil.which(explicit)
+        if which_explicit:
+            return which_explicit
+
     resolved = shutil.which(binary_name)
-    if not resolved:
-        raise FFmpegNotFoundError(
-            f"Required binary '{binary_name}' was not found in PATH. Install ffmpeg/ffprobe first."
-        )
-    return resolved
+    if resolved:
+        return resolved
+
+    if sys.platform == "win32":
+        for candidate in _windows_binary_candidates(binary_name):
+            return str(candidate.resolve())
+
+    raise FFmpegNotFoundError(
+        f"Required binary '{binary_name}' was not found in PATH. Install ffmpeg/ffprobe first, "
+        f"restart your terminal (and IDE) so PATH updates, or set FFMPEG_PATH / FFPROBE_PATH in backend/.env "
+        f"to the full path of {binary_name}.exe."
+    )
 
 
 def _looks_like_corrupt_audio(stderr: str) -> bool:
@@ -154,11 +189,14 @@ def build_ffmpeg_command(
     ffmpeg_bin: str,
     filter_chain: str = FILTER_CHAIN,
 ) -> list[str]:
+    # FFmpeg accepts forward slashes on all platforms; Path(str) on Windows uses "\" otherwise.
+    in_s = input_path.as_posix()
+    out_s = output_path.as_posix()
     return [
         ffmpeg_bin,
         "-y",
         "-i",
-        str(input_path),
+        in_s,
         "-af",
         filter_chain,
         "-ac",
@@ -167,7 +205,7 @@ def build_ffmpeg_command(
         str(TARGET_SAMPLE_RATE),
         "-c:a",
         TARGET_CODEC,
-        str(output_path),
+        out_s,
     ]
 
 
@@ -184,6 +222,8 @@ def preprocess_for_scribe(
     *,
     job_id: str | None = None,
     timeout_s: float = 120,
+    ffmpeg_bin: str | None = None,
+    ffprobe_bin: str | None = None,
 ) -> PreprocessResult:
     """Run fixed preprocessing chain and emit 16kHz mono PCM WAV for Scribe."""
 
@@ -195,8 +235,8 @@ def preprocess_for_scribe(
     if not src.exists() or not src.is_file():
         raise FileNotFoundError(f"Input audio file does not exist: '{src}'")
 
-    ffmpeg_bin = _resolve_binary("ffmpeg")
-    ffprobe_bin = _resolve_binary("ffprobe")
+    ffmpeg_bin = _resolve_binary("ffmpeg", explicit=ffmpeg_bin)
+    ffprobe_bin = _resolve_binary("ffprobe", explicit=ffprobe_bin)
 
     timings_ms: dict[str, int] = {}
 
