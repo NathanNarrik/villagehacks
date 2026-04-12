@@ -2,11 +2,11 @@
 
 Primary routes match the frozen frontend contract in `frontend/src/services/api.ts`:
 
-    POST /transcribe   — accepts an audio UploadFile, runs the 7-layer pipeline
-    GET  /stream/token — single-use token for websocket auth
-    WS   /stream       — realtime relay + correction events
-    GET  /benchmark    — returns the cached benchmark JSON Person A produces
-    GET  /health       — reachability check for Tavily, Claude, and the (in-memory) store
+    POST /transcribe   - accepts an audio UploadFile, runs the 7-layer pipeline
+    GET  /stream/token - single-use token for websocket auth
+    WS   /stream       - realtime relay + correction events
+    GET  /benchmark    - returns the cached benchmark JSON Person A produces
+    GET  /health       - reachability check for Tavily, Claude, and store backend status
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, 
 from fastapi.middleware.cors import CORSMiddleware
 from tavily import TavilyClient
 
-from . import learning_loop, pipeline, realtime
+from . import learning_loop, pipeline, realtime, storage
 from .config import settings
 from .schemas import BenchmarkResponse, HealthResponse, StreamToken, TranscribeResponse
 
@@ -34,7 +34,11 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("CareCaller backend starting (in-memory store, model=%s)", settings.CLAUDE_MODEL)
+    log.info(
+        "CareCaller backend starting (store=%s, model=%s)",
+        storage.store_backend_label(),
+        settings.CLAUDE_MODEL,
+    )
     yield
     log.info("CareCaller backend shutting down")
 
@@ -313,7 +317,7 @@ async def health() -> HealthResponse:
     )
     return HealthResponse(
         status="ok",
-        redis="in-memory",
+        redis=storage.store_backend_label(),
         scribe=_scribe_status(),
         tavily=tavily_status,
         claude=claude_status,

@@ -1,8 +1,9 @@
-name: villagehacks-audio
+name: village-hacks
 channels:
   - conda-forge
 dependencies:
   - python=3.11
   - pip
+  - ffmpeg
   - pip:
-      - pytest>=8,<9
+      - -r requirements.txt

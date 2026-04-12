@@ -17,6 +17,7 @@ Optional fields:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import re
 from pathlib import Path
@@ -26,6 +27,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_PATH = BACKEND_DIR / "data" / "benchmark_results.json"
 DEFAULT_RESULTS_EXAMPLE_PATH = BACKEND_DIR / "data" / "benchmark_results.json.example"
 DEFAULT_EVAL_PATH = BACKEND_DIR / "data" / "benchmark_eval.jsonl"
+DEFAULT_MANIFEST_PATH = BACKEND_DIR / "test_audio" / "benchmark" / "v1" / "manifest.csv"
 
 _WORD_RE = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
 _DIGIT_RE = re.compile(r"\d")
@@ -51,6 +53,12 @@ def _parse_args() -> argparse.Namespace:
         default=DEFAULT_RESULTS_PATH,
         help="Output benchmark JSON path",
     )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=DEFAULT_MANIFEST_PATH,
+        help="Benchmark manifest CSV (ground_truth/keywords/category/difficulty metadata)",
+    )
     return parser.parse_args()
 
 
@@ -69,6 +77,23 @@ def _load_json(path: Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise SystemExit(f"Malformed benchmark source JSON ({path}): {exc}") from exc
+
+
+def _load_manifest_rows(path: Path) -> dict[str, dict[str, str]]:
+    if not path.exists():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            out: dict[str, dict[str, str]] = {}
+            for row in reader:
+                clip_id = str((row or {}).get("clip_id") or "").strip()
+                if not clip_id:
+                    continue
+                out[clip_id] = {str(k): str(v or "").strip() for k, v in row.items()}
+            return out
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(f"Malformed benchmark manifest CSV ({path}): {exc}") from exc
 
 
 def _round(value: float) -> float:
@@ -256,6 +281,7 @@ def _scaled_optional(value: float | None, scale: float) -> float | None:
 def _compute_result_row(
     row: dict[str, Any],
     source_rows_by_clip: dict[str, dict[str, Any]],
+    manifest_rows_by_clip: dict[str, dict[str, str]],
     medical_terms: list[list[str]],
     wer_scale: float,
     rate_scale: float,
@@ -265,9 +291,13 @@ def _compute_result_row(
         raise ValueError("eval row missing clip_id")
 
     source = source_rows_by_clip.get(clip_id, {})
+    manifest = manifest_rows_by_clip.get(clip_id, {})
 
     reference_text = _coerce_text(
-        row.get("ground_truth") or row.get("reference_text") or row.get("text")
+        row.get("ground_truth")
+        or row.get("reference_text")
+        or row.get("text")
+        or manifest.get("ground_truth")
     )
     raw_text = _coerce_text(row.get("raw_text") or row.get("raw_transcript"))
     corrected_text = _coerce_text(
@@ -288,7 +318,9 @@ def _compute_result_row(
     raw_digit_acc = _accuracy_ratio(_digits(reference_text), _digits(raw_text))
     corrected_digit_acc = _accuracy_ratio(_digits(reference_text), _digits(corrected_text))
 
-    explicit_keywords = _parse_medical_keywords(row.get("medical_keywords"))
+    explicit_keywords = _parse_medical_keywords(
+        row.get("medical_keywords") or manifest.get("medical_keywords")
+    )
     raw_medical_acc = _medical_keyword_accuracy_ratio(
         reference_text,
         raw_text,
@@ -306,12 +338,22 @@ def _compute_result_row(
     if raw_word_error > 0:
         improvement_pct = max(0.0, ((raw_word_error - corrected_word_error) / raw_word_error) * 100.0)
 
-    difficulty_raw = str(row.get("difficulty") or source.get("difficulty") or "Standard").strip()
+    difficulty_raw = str(
+        row.get("difficulty")
+        or source.get("difficulty")
+        or manifest.get("difficulty")
+        or "Standard"
+    ).strip()
     difficulty = "Adversarial" if difficulty_raw.lower().startswith("ad") else "Standard"
 
     return {
         "clip_id": clip_id,
-        "category": str(row.get("category") or source.get("category") or "Unknown"),
+        "category": str(
+            row.get("category")
+            or source.get("category")
+            or manifest.get("category")
+            or "Unknown"
+        ),
         "difficulty": difficulty,
         "raw_wer": _round(raw_word_error * wer_scale),
         "corrected_wer": _round(corrected_word_error * wer_scale),
@@ -352,7 +394,45 @@ def _add_optional_fields(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def _recompute(payload: dict[str, Any], eval_path: Path) -> dict[str, Any]:
+def _apply_manifest_metadata(
+    payload: dict[str, Any],
+    manifest_rows_by_clip: dict[str, dict[str, str]],
+) -> dict[str, Any]:
+    if not manifest_rows_by_clip:
+        return payload
+
+    for row in payload.get("results", []):
+        if not isinstance(row, dict):
+            continue
+        clip_id = str(row.get("clip_id") or "").strip()
+        if not clip_id:
+            continue
+        manifest = manifest_rows_by_clip.get(clip_id)
+        if not manifest:
+            continue
+
+        manifest_category = str(manifest.get("category") or "").strip()
+        if manifest_category:
+            row["category"] = manifest_category
+
+        manifest_difficulty = str(manifest.get("difficulty") or "").strip()
+        if manifest_difficulty:
+            row["difficulty"] = (
+                "Adversarial"
+                if manifest_difficulty.lower().startswith("ad")
+                else "Standard"
+            )
+
+    return payload
+
+
+def _recompute(
+    payload: dict[str, Any],
+    eval_path: Path,
+    manifest_rows_by_clip: dict[str, dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    manifest_rows_by_clip = manifest_rows_by_clip or {}
+    payload = _apply_manifest_metadata(payload, manifest_rows_by_clip)
     if not eval_path.exists():
         return _add_optional_fields(payload)
 
@@ -383,6 +463,7 @@ def _recompute(payload: dict[str, Any], eval_path: Path) -> dict[str, Any]:
                 _compute_result_row(
                     row=row,
                     source_rows_by_clip=source_rows_by_clip,
+                    manifest_rows_by_clip=manifest_rows_by_clip,
                     medical_terms=medical_terms,
                     wer_scale=wer_scale,
                     rate_scale=rate_scale,
@@ -440,7 +521,8 @@ def main() -> int:
     args = _parse_args()
     source = _resolve_source_path(args.source)
     payload = _load_json(source)
-    payload = _recompute(payload, args.eval)
+    manifest_rows_by_clip = _load_manifest_rows(args.manifest)
+    payload = _recompute(payload, args.eval, manifest_rows_by_clip=manifest_rows_by_clip)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2), encoding="utf-8")

@@ -18,6 +18,19 @@ The goal of this README is not to restate the pitch. It is to help the next cont
 - The supported product flow for this repo version is **demo audio clips only**.
 - The final demo audio set is **not finished yet** and remains a required work item.
 
+## Update (April 12, 2026)
+
+Completed in this repo iteration:
+
+- In-memory storage is now explicitly formalized as the active runtime mode (no Redis dependency added).
+- `/health` reports the active store mode from the storage layer.
+- Benchmark manifest metadata (`ground_truth`, `medical_keywords`) is now populated in
+  `backend/test_audio/benchmark/v1/manifest.csv`.
+- `backend/scripts/run_benchmark.py` now reads benchmark manifest metadata and applies it during recomputation.
+- Frontend benchmark rendering now normalizes ratio-vs-percent API data and uses real ablation-driven trend data instead of synthetic random trend values.
+- Frontend API types were aligned with backend schemas for benchmark optional metrics and health payload fields.
+- Frontend stale placeholder page was reconciled (`frontend/src/pages/Index.tsx` now redirects cleanly).
+
 ## Scope Decisions
 
 - `POST /transcribe` is the primary supported demo API.

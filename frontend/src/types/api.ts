@@ -57,9 +57,12 @@ export interface StreamToken {
 }
 
 export interface StreamFrame {
-  type: "partial" | "committed";
-  text: string;
-  words: { word: string; start_ms: number; end_ms: number }[];
+  type: "partial" | "committed" | "correction" | "error";
+  text?: string;
+  words?: { word: string; start_ms: number; end_ms: number }[];
+  payload?: TranscribeResponse;
+  stage?: string;
+  message?: string;
 }
 
 export interface AblationRow {
@@ -75,6 +78,12 @@ export interface BenchmarkClipResult {
   difficulty: "Standard" | "Adversarial";
   raw_wer: number;
   corrected_wer: number;
+  raw_cer?: number | null;
+  corrected_cer?: number | null;
+  raw_digit_accuracy?: number | null;
+  corrected_digit_accuracy?: number | null;
+  raw_medical_keyword_accuracy?: number | null;
+  corrected_medical_keyword_accuracy?: number | null;
   improvement_pct: number;
 }
 
@@ -83,18 +92,28 @@ export interface BenchmarkMetrics {
   unsafe_guess_rate: number;
   uncertainty_coverage: number;
   phonetic_hit_rate: number;
+  digit_accuracy_coverage?: number | null;
+  medical_keyword_accuracy_coverage?: number | null;
+}
+
+export interface BenchmarkAggregate {
+  avg_raw_wer: number;
+  avg_corrected_wer: number;
+  avg_raw_cer?: number | null;
+  avg_corrected_cer?: number | null;
+  avg_raw_digit_accuracy?: number | null;
+  avg_corrected_digit_accuracy?: number | null;
+  avg_raw_medical_keyword_accuracy?: number | null;
+  avg_corrected_medical_keyword_accuracy?: number | null;
+  avg_improvement_pct: number;
+  keyterm_impact_pct: number;
 }
 
 export interface BenchmarkResponse {
   results: BenchmarkClipResult[];
   ablation: AblationRow[];
   metrics: BenchmarkMetrics;
-  aggregate: {
-    avg_raw_wer: number;
-    avg_corrected_wer: number;
-    avg_improvement_pct: number;
-    keyterm_impact_pct: number;
-  };
+  aggregate: BenchmarkAggregate;
 }
 
 export interface HealthResponse {
@@ -103,6 +122,11 @@ export interface HealthResponse {
   scribe: string;
   tavily: string;
   claude: string;
+  learning_loop?: {
+    keyterm_count: number;
+    phonetic_map_size: number;
+  };
+  realtime?: string;
 }
 
 export type ProcessingStage = "idle" | "uploading" | "preprocessing" | "scribe" | "uncertainty" | "tavily" | "claude" | "done" | "error";

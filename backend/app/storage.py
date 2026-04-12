@@ -1,7 +1,7 @@
 """In-process key/value store with TTL support.
 
 Mimics a small subset of Redis (string get/set, hash, sorted set) so that swapping
-in real Redis later requires only changing this file. No locking — FastAPI runs in a
+in real Redis later requires only changing this file. No locking - FastAPI runs in a
 single asyncio event loop per worker so all access is serialized.
 """
 from __future__ import annotations
@@ -80,3 +80,7 @@ class InMemoryStore:
 
 
 store = InMemoryStore()
+
+
+def store_backend_label() -> str:
+    return "in-memory"

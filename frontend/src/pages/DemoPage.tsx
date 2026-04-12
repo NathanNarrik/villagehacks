@@ -62,10 +62,6 @@ const DemoPage = () => {
       </div>
 
       <div className="container mx-auto px-6 max-w-[1400px] py-8">
-        <p className="text-xs text-muted-foreground mb-4">
-          API: {import.meta.env.VITE_API_URL || "(set VITE_API_URL in frontend/.env)"}
-        </p>
-
         {errorMessage && (
           <div className="mb-6 rounded-lg border border-signal-red/40 bg-signal-red/10 px-4 py-3 text-sm text-signal-red">
             {errorMessage}

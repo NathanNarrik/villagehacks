@@ -101,7 +101,7 @@ Point any client at the same URL you pass to Uvicorn (e.g. `http://127.0.0.1:800
 4. **tavily_verify** — confidence-gated medical verification (cap=5/transcript, deduped, cached)
 5. **claude_correct** — safe correction with hallucination guard
 6. **claude_extract** — clinical entity extraction
-7. **learning_loop** — phonetic map + correction history + adaptive keyterms (in-memory store, Redis-compatible API)
+7. **learning_loop** — phonetic map + correction history + adaptive keyterms (in-memory store)
 
 The hallucination guard in `claude_correct.py` reverts any "changed" word that
 isn't backed by a Tavily-verified canonical match — this is what powers the
@@ -109,8 +109,8 @@ isn't backed by a Tavily-verified canonical match — this is what powers the
 
 ## Storage
 
-Default storage is in-memory (`InMemoryStore` in `app/storage.py`), which mirrors a
-small Redis subset (string TTL, hash, sorted set) for straightforward Redis swap-in.
+Default storage is in-memory (`InMemoryStore` in `app/storage.py`) with string TTL,
+hash, and sorted-set primitives used by the learning loop and cache.
 
 ## Tests
 

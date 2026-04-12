@@ -4,6 +4,7 @@ OWNED BY PERSON A. See HANDOFF_PERSON_A.md for the full spec.
 """
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -117,17 +118,29 @@ async def transcribe_batch(wav_path: str, keyterms: list[str]) -> ScribeResult:
     ]
     data.extend([("keyterms", term) for term in limited_keyterms])
 
-    try:
+    def _post_sync() -> httpx.Response:
         with path.open("rb") as f:
-            files = {"file": (path.name, f, "audio/wav")}
-            async with httpx.AsyncClient(timeout=90.0) as client:
-                resp = await client.post(
+            # Build one explicit multipart list to avoid mixed data/files encoding
+            # edge-cases across httpx versions.
+            multipart: list[tuple[str, Any]] = [
+                ("model_id", (None, "scribe_v2")),
+                ("diarize", (None, "true")),
+                ("tag_audio_events", (None, "true")),
+                ("timestamps_granularity", (None, "word")),
+                ("file_format", (None, "pcm_s16le_16")),
+            ]
+            multipart.extend([("keyterms", (None, term)) for term in limited_keyterms])
+            multipart.append(("file", (path.name, f, "audio/wav")))
+            with httpx.Client(timeout=90.0) as client:
+                return client.post(
                     SCRIBE_BATCH_URL,
                     headers={"xi-api-key": api_key},
                     params={"enable_logging": "true"},
-                    data=data,
-                    files=files,
+                    files=multipart,
                 )
+
+    try:
+        resp = await asyncio.to_thread(_post_sync)
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:
         detail = exc.response.text[:500] if exc.response is not None else str(exc)

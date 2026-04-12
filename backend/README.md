@@ -13,7 +13,7 @@ From repository root:
 
 ```bash
 conda env create -f backend/environment.yml
-conda activate villagehacks-audio
+conda activate village-hacks
 ```
 
 `ffmpeg` and `ffprobe` must be available in `PATH`.
@@ -140,6 +140,11 @@ Generate `/benchmark` data at `backend/data/benchmark_results.json`:
 ```bash
 python backend/scripts/run_benchmark.py
 ```
+
+The script also reads benchmark metadata from
+`backend/test_audio/benchmark/v1/manifest.csv` (category, difficulty, ground truth,
+medical keywords) so benchmark recomputation stays aligned with the versioned audio
+manifest.
 
 For recomputed WER/CER, digit-level accuracy, and medical keyword accuracy, provide
 `backend/data/benchmark_eval.jsonl` rows with:

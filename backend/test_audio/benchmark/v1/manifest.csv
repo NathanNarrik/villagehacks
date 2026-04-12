@@ -1,21 +1,21 @@
 clip_id,difficulty,category,audio_relpath,ground_truth,medical_keywords,notes
-clip_01,Standard,Medication Refill,audio/standard/clip_01.wav,,,
-clip_02,Standard,Medication Refill,audio/standard/clip_02.wav,,,
-clip_03,Standard,Post-op Follow-up,audio/standard/clip_03.wav,,,
-clip_04,Standard,Post-op Follow-up,audio/standard/clip_04.wav,,,
-clip_05,Standard,New Symptom Check,audio/standard/clip_05.wav,,,
-clip_06,Standard,New Symptom Check,audio/standard/clip_06.wav,,,
-clip_07,Standard,Allergy Review,audio/standard/clip_07.wav,,,
-clip_08,Standard,Allergy Review,audio/standard/clip_08.wav,,,
-clip_09,Standard,Dosage Query,audio/standard/clip_09.wav,,,
-clip_10,Standard,Dosage Query,audio/standard/clip_10.wav,,,
-clip_11,Adversarial,Medication Refill,audio/adversarial/clip_11.wav,,,
-clip_12,Adversarial,Post-op Follow-up,audio/adversarial/clip_12.wav,,,
-clip_13,Adversarial,New Symptom Check,audio/adversarial/clip_13.wav,,,
-clip_14,Adversarial,Allergy Review,audio/adversarial/clip_14.wav,,,
-clip_15,Adversarial,Dosage Query,audio/adversarial/clip_15.wav,,,
-clip_16,Adversarial,Heavy Accent,audio/adversarial/clip_16.wav,,,
-clip_17,Adversarial,Elderly Speaker,audio/adversarial/clip_17.wav,,,
-clip_18,Adversarial,Rapid Med List,audio/adversarial/clip_18.wav,,,
-clip_19,Adversarial,Soft Voice + Noise,audio/adversarial/clip_19.wav,,,
-clip_20,Adversarial,Background Noise,audio/adversarial/clip_20.wav,,,
+clip_01,Standard,Medication Refill,audio/standard/clip_01.wav,"Hi, um, I take metformin, I think it's either 50 mg or maybe 15 mg twice daily, I'm not completely sure, and lately I've been feeling kind of dizzy and lightheaded, so I wanted to check if I should keep taking it or adjust the dose.","metformin","source: audio_gen/input/clips_5x_variants.csv (clip_0001_clean)"
+clip_02,Standard,Medication Refill,audio/standard/clip_02.wav,"Hello, I need a refill for lisinopril, I believe it's 10 milligrams, but it might be 15, I'm not totally sure, once a day, and I only have like 5 or maybe 9 pills left, so I wanted to get that sorted out.","lisinopril","source: audio_gen/input/clips_5x_variants.csv (clip_0002_clean)"
+clip_03,Standard,Post-op Follow-up,audio/standard/clip_03.wav,"So I'm taking amlodipine in the morning and atorvastatin at night, and I think the amlodipine is 5 mg, or maybe 9 mg, I might be mixing that up, but I'm running low and need a refill.","amlodipine, atorvastatin","source: audio_gen/input/clips_5x_variants.csv (clip_0003_clean)"
+clip_04,Standard,Post-op Follow-up,audio/standard/clip_04.wav,"Hi, I think I ran out of metoprolol yesterday, and I might have missed a dose, it's either 25 or 50 milligrams, I can't remember exactly, so I wanted to ask if I can refill it.","metoprolol","source: audio_gen/input/clips_5x_variants.csv (clip_0004_clean)"
+clip_05,Standard,New Symptom Check,audio/standard/clip_05.wav,"Since my surgery last week, I've been taking oxycodone, I think it's 5 mg but maybe 9 mg, and I've been feeling really nauseous and kind of dizzy, so I'm not sure if that's normal or if I should switch medications.","oxycodone","source: audio_gen/input/clips_5x_variants.csv (clip_0005_clean)"
+clip_06,Standard,New Symptom Check,audio/standard/clip_06.wav,"After the procedure, I was prescribed hydrocodone, or maybe hydroxyzine, I'm not totally sure which one, for pain, and it helps, but I feel very tired and a bit confused sometimes.","hydrocodone, hydroxyzine","source: audio_gen/input/clips_5x_variants.csv (clip_0006_clean)"
+clip_07,Standard,Allergy Review,audio/standard/clip_07.wav,"I had knee surgery about ten days ago, and I've been alternating between ibuprofen and acetaminophen, like maybe every 6 or 16 hours, I might be saying that wrong, but the pain is still there.","ibuprofen, acetaminophen","source: audio_gen/input/clips_5x_variants.csv (clip_0007_clean)"
+clip_08,Standard,Allergy Review,audio/standard/clip_08.wav,"My incision area still hurts, and I've been taking tramadol occasionally, maybe 50 or 15 milligrams when it gets bad, but I'm not sure if I'm taking too much.","tramadol","source: audio_gen/input/clips_5x_variants.csv (clip_0008_clean)"
+clip_09,Standard,Dosage Query,audio/standard/clip_09.wav,"Over the past few days, I've been feeling shortness of breath and some tightness in my chest, especially when I walk, and I'm also on metformin or maybe methotrexate, I might be mixing that up.","metformin, methotrexate","source: audio_gen/input/clips_5x_variants.csv (clip_0009_clean)"
+clip_10,Standard,Dosage Query,audio/standard/clip_10.wav,"I've been feeling dizzy after taking my blood pressure medication in the morning, and sometimes I feel like I might faint, especially if I take like 10 or maybe 20 milligrams.","","source: audio_gen/input/clips_5x_variants.csv (clip_0010_clean)"
+clip_11,Adversarial,Medication Refill,audio/adversarial/clip_11.wav,"I started having headaches after I began taking prednisone, or maybe prednisolone, I'm not completely sure, and they seem to come and go throughout the day.","prednisone, prednisolone","source: audio_gen/input/clips_5x_variants.csv (clip_0011_clean)"
+clip_12,Adversarial,Post-op Follow-up,audio/adversarial/clip_12.wav,"I've been feeling nauseous and really fatigued ever since I started taking antibiotics, maybe amoxicillin or something similar, and it's been about 13 or 30 hours since the symptoms started.","amoxicillin","source: audio_gen/input/clips_5x_variants.csv (clip_0012_clean)"
+clip_13,Adversarial,New Symptom Check,audio/adversarial/clip_13.wav,"I just wanted to let you know that I'm allergic to penicillin, because the last time I took it I developed a rash and some swelling, maybe after like 5 or 9 hours.","penicillin","source: audio_gen/input/clips_5x_variants.csv (clip_0013_clean)"
+clip_14,Adversarial,Allergy Review,audio/adversarial/clip_14.wav,"I think I had a reaction to amoxicillin, or maybe amlodipine, I might be confusing the names, but I broke out in hives a few years ago.","amoxicillin, amlodipine","source: audio_gen/input/clips_5x_variants.csv (clip_0014_clean)"
+clip_15,Adversarial,Dosage Query,audio/adversarial/clip_15.wav,"I might be allergic to sulfa drugs, because I remember feeling really sick and getting a rash, maybe after 15 or 50 minutes, I don't remember exactly.","sulfa drugs","source: audio_gen/input/clips_5x_variants.csv (clip_0015_clean)"
+clip_16,Adversarial,Heavy Accent,audio/adversarial/clip_16.wav,"The last time I took ibuprofen, I noticed swelling in my face and hands afterward, maybe within 6 or 16 hours, so I'm wondering if that was an allergic reaction.","ibuprofen","source: audio_gen/input/clips_5x_variants.csv (clip_0016_clean)"
+clip_17,Adversarial,Elderly Speaker,audio/adversarial/clip_17.wav,"I wanted to ask if I should be taking metformin 500 mg once or twice daily, or maybe like 50 mg twice daily, I might be saying that wrong, I just want to be sure.","metformin","source: audio_gen/input/clips_5x_variants.csv (clip_0017_clean)"
+clip_18,Adversarial,Rapid Med List,audio/adversarial/clip_18.wav,"Right now I'm taking lisinopril 10 milligrams, but my blood pressure is still high, so I was wondering if I can increase it to 20 or maybe 30 milligrams safely.","lisinopril","source: audio_gen/input/clips_5x_variants.csv (clip_0018_clean)"
+clip_19,Adversarial,Soft Voice + Noise,audio/adversarial/clip_19.wav,"Is it okay if I take two tablets of ibuprofen at once when the pain gets really bad, or should I stick to one, like every 5 or 9 hours.","ibuprofen","source: audio_gen/input/clips_5x_variants.csv (clip_0019_clean)"
+clip_20,Adversarial,Background Noise,audio/adversarial/clip_20.wav,"I was prescribed prednisone for inflammation, but I'm not sure how often I should take it, like maybe every 12 or 20 hours, or if I need to taper the dose.","prednisone","source: audio_gen/input/clips_5x_variants.csv (clip_0020_clean)"

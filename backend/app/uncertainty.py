@@ -137,6 +137,54 @@ class _XGBoostRiskScorer:
 _xgb_scorer = _XGBoostRiskScorer()
 
 
+def _build_xgb_features(
+    words: list[ScribeWord],
+    idx: int,
+    word_norm: str,
+    keyterms_norm: set[str],
+    phonetic_map: dict[str, str],
+    correction_history: dict[str, int],
+    nearest_dist: int | None,
+) -> dict[str, Any]:
+    current = words[idx]
+    prev = words[idx - 1] if idx > 0 else None
+    nxt = words[idx + 1] if idx + 1 < len(words) else None
+
+    prev_norm = normalize(prev.text) if prev else ""
+    next_norm = normalize(nxt.text) if nxt else ""
+
+    pause_before_ms = 0
+    if prev is not None:
+        pause_before_ms = max(0, current.start_ms - prev.end_ms)
+    pause_after_ms = 0
+    if nxt is not None:
+        pause_after_ms = max(0, nxt.start_ms - current.end_ms)
+
+    duration_ms = max(0, current.end_ms - current.start_ms)
+    history_hits = int(correction_history.get(word_norm, 0))
+
+    return {
+        # Existing coarse features
+        "duration_sec_file": duration_ms / 1000.0,
+        "contains_ambiguity": int(bool(nearest_dist is not None and nearest_dist <= 2)),
+        "contains_medical_terms": int(matches_medical(word_norm)),
+        "has_interruptions": int("..." in current.text or "--" in current.text or pause_before_ms > 600),
+        # Richer transcript-context features
+        "token_char_len": len(word_norm),
+        "is_numeric_token": int(any(ch.isdigit() for ch in word_norm)),
+        "is_keyterm_exact": int(word_norm in keyterms_norm),
+        "in_phonetic_map": int(word_norm in phonetic_map),
+        "correction_history_hits": history_hits,
+        "phonetic_distance_nearest": float(nearest_dist if nearest_dist is not None else 99),
+        "pause_before_sec": pause_before_ms / 1000.0,
+        "pause_after_sec": pause_after_ms / 1000.0,
+        "context_prev_len": len(prev_norm),
+        "context_next_len": len(next_norm),
+        "context_prev_is_medical": int(matches_medical(prev_norm)),
+        "context_next_is_medical": int(matches_medical(next_norm)),
+    }
+
+
 def score_words(
     words: list[ScribeWord],
     keyterms: list[str],
@@ -218,12 +266,15 @@ def score_words(
 
         # Optional Phase 2: XGBoost risk scoring.
         xgb_risk = _xgb_scorer.risk_for_word(
-            {
-                "duration_sec_file": max(0.0, (w.end_ms - w.start_ms) / 1000.0),
-                "contains_ambiguity": int(bool(nearest_dist and nearest_dist <= 2)),
-                "contains_medical_terms": int(matches_medical(word_norm)),
-                "has_interruptions": int("..." in w.text or "--" in w.text),
-            }
+            _build_xgb_features(
+                words=words,
+                idx=i,
+                word_norm=word_norm,
+                keyterms_norm=keyterms_norm,
+                phonetic_map=phonetic_map,
+                correction_history=correction_history,
+                nearest_dist=nearest_dist,
+            )
         )
         if xgb_risk is not None:
             # Use the more conservative signal (max risk) to reduce silent failures.
