@@ -152,6 +152,18 @@ def test_benchmark_serves_cached_json(monkeypatch, tmp_path):
     assert "ablation" in body
     assert "metrics" in body
     assert "aggregate" in body
+    assert "raw_cer" in body["results"][0]
+    assert "corrected_cer" in body["results"][0]
+    assert "raw_digit_accuracy" in body["results"][0]
+    assert "corrected_digit_accuracy" in body["results"][0]
+    assert "raw_medical_keyword_accuracy" in body["results"][0]
+    assert "corrected_medical_keyword_accuracy" in body["results"][0]
+    assert "avg_raw_cer" in body["aggregate"]
+    assert "avg_corrected_cer" in body["aggregate"]
+    assert "avg_raw_digit_accuracy" in body["aggregate"]
+    assert "avg_corrected_digit_accuracy" in body["aggregate"]
+    assert "avg_raw_medical_keyword_accuracy" in body["aggregate"]
+    assert "avg_corrected_medical_keyword_accuracy" in body["aggregate"]
 
 
 def test_benchmark_filters_by_difficulty(monkeypatch, tmp_path):

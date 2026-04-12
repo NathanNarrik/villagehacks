@@ -1,0 +1,4 @@
+demo_id,scenario,audio_relpath,script_ref,expected_highlights,notes
+demo_20260412_medrefill_take01,Medication Refill,audio/demo_20260412_medrefill_take01.wav,docs/demo_scripts/med_refill_v1.txt,"lisinopril; 10 mg; once daily",Clean room tone
+demo_20260412_dosage_take01,Dosage Query,audio/demo_20260412_dosage_take01.wav,docs/demo_scripts/dosage_query_v1.txt,"metformin; 500 mg; twice daily",Moderate speaking rate
+demo_20260412_noise_take01,Background Noise,audio/demo_20260412_noise_take01.wav,docs/demo_scripts/noise_case_v1.txt,"amoxicillin; 500 mg; every 8 hours",Cafe/background noise

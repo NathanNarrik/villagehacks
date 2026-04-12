@@ -98,6 +98,12 @@ class BenchmarkClipResult(BaseModel):
     difficulty: Literal["Standard", "Adversarial"]
     raw_wer: float
     corrected_wer: float
+    raw_cer: float | None = None
+    corrected_cer: float | None = None
+    raw_digit_accuracy: float | None = None
+    corrected_digit_accuracy: float | None = None
+    raw_medical_keyword_accuracy: float | None = None
+    corrected_medical_keyword_accuracy: float | None = None
     improvement_pct: float
 
 
@@ -106,11 +112,19 @@ class BenchmarkMetrics(BaseModel):
     unsafe_guess_rate: float
     uncertainty_coverage: float
     phonetic_hit_rate: float
+    digit_accuracy_coverage: float | None = None
+    medical_keyword_accuracy_coverage: float | None = None
 
 
 class BenchmarkAggregate(BaseModel):
     avg_raw_wer: float
     avg_corrected_wer: float
+    avg_raw_cer: float | None = None
+    avg_corrected_cer: float | None = None
+    avg_raw_digit_accuracy: float | None = None
+    avg_corrected_digit_accuracy: float | None = None
+    avg_raw_medical_keyword_accuracy: float | None = None
+    avg_corrected_medical_keyword_accuracy: float | None = None
     avg_improvement_pct: float
     keyterm_impact_pct: float
 

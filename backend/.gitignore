@@ -5,3 +5,9 @@ __pycache__/
 .pytest_cache/
 data/clips/
 data/benchmark_results.json
+data/benchmark_eval.jsonl
+test_audio/**/audio/**/*.wav
+test_audio/**/audio/**/*.mp3
+test_audio/**/audio/**/*.m4a
+test_audio/**/audio/**/*.flac
+test_audio/**/audio/**/*.ogg
