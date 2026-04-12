@@ -5,43 +5,44 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { MOCK_TRANSCRIBE } from "@/services/mockData";
+import { transcribeAudio } from "@/services/api";
 import type { TranscribeResponse, ProcessingStage, RawWord, CorrectedWord } from "@/types/api";
 
-const PIPELINE_STAGES: { key: ProcessingStage; label: string }[] = [
-  { key: "preprocessing", label: "Preprocessing" },
-  { key: "scribe", label: "Scribe v2" },
-  { key: "uncertainty", label: "Uncertainty" },
-  { key: "tavily", label: "Tavily Verify" },
-  { key: "claude", label: "Correcting" },
-];
-
+/** Served from `frontend/public/demo-audio/` — replace with real speech clips as needed. */
 const SCENARIOS = [
-  { id: "med-refill", label: "Medication Refill", description: "Patient calling to refill metformin and lisinopril prescriptions", icon: Pill, category: "Standard" },
-  { id: "post-op", label: "Post-Op Follow-up", description: "Surgeon reviewing recovery progress after knee replacement", icon: Syringe, category: "Standard" },
-  { id: "symptom-check", label: "New Symptom Report", description: "Patient describing new headaches and dizziness symptoms", icon: Stethoscope, category: "Standard" },
-  { id: "allergy-review", label: "Allergy Review", description: "Nurse confirming drug allergies before administering new prescription", icon: Stethoscope, category: "Standard" },
-  { id: "adversarial-accent", label: "Heavy Accent + Noise", description: "Thick accent over speakerphone with background TV audio", icon: AlertTriangle, category: "Adversarial" },
-  { id: "rapid-meds", label: "Rapid Med List", description: "Doctor rattling off 6 medications in under 15 seconds", icon: Activity, category: "Adversarial" },
-];
+  { id: "med-refill", wav: "/demo-audio/med-refill.wav", label: "Medication Refill", description: "Patient calling to refill metformin and lisinopril prescriptions", icon: Pill, category: "Standard" },
+  { id: "post-op", wav: "/demo-audio/post-op.wav", label: "Post-Op Follow-up", description: "Surgeon reviewing recovery progress after knee replacement", icon: Syringe, category: "Standard" },
+  { id: "symptom-check", wav: "/demo-audio/symptom-check.wav", label: "New Symptom Report", description: "Patient describing new headaches and dizziness symptoms", icon: Stethoscope, category: "Standard" },
+  { id: "allergy-review", wav: "/demo-audio/allergy-review.wav", label: "Allergy Review", description: "Nurse confirming drug allergies before administering new prescription", icon: Stethoscope, category: "Standard" },
+  { id: "adversarial-accent", wav: "/demo-audio/adversarial-accent.wav", label: "Heavy Accent + Noise", description: "Thick accent over speakerphone with background TV audio", icon: AlertTriangle, category: "Adversarial" },
+  { id: "rapid-meds", wav: "/demo-audio/rapid-meds.wav", label: "Rapid Med List", description: "Doctor rattling off 6 medications in under 15 seconds", icon: Activity, category: "Adversarial" },
+] as const;
 
 const DemoPage = () => {
   const [result, setResult] = useState<TranscribeResponse | null>(null);
   const [stage, setStage] = useState<ProcessingStage>("idle");
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const simulateProcess = useCallback((scenarioId: string) => {
-    setActiveScenario(scenarioId);
+  const runScenario = useCallback(async (scenario: (typeof SCENARIOS)[number]) => {
+    setErrorMessage(null);
+    setActiveScenario(scenario.id);
     setResult(null);
-    setStage("preprocessing");
-    setTimeout(() => setStage("scribe"), 500);
-    setTimeout(() => setStage("uncertainty"), 1200);
-    setTimeout(() => setStage("tavily"), 1700);
-    setTimeout(() => setStage("claude"), 2400);
-    setTimeout(() => {
-      setResult(MOCK_TRANSCRIBE);
+    setStage("uploading");
+    try {
+      const res = await fetch(scenario.wav);
+      if (!res.ok) {
+        throw new Error(`Missing demo clip at ${scenario.wav} — add this file under frontend/public/demo-audio/`);
+      }
+      const blob = await res.blob();
+      const file = new File([blob], `${scenario.id}.wav`, { type: blob.type || "audio/wav" });
+      const data = await transcribeAudio(file);
+      setResult(data);
       setStage("done");
-    }, 3200);
+    } catch (e) {
+      setStage("error");
+      setErrorMessage(e instanceof Error ? e.message : "Transcription failed");
+    }
   }, []);
 
   const isProcessing = stage !== "idle" && stage !== "done" && stage !== "error";
@@ -53,12 +54,24 @@ const DemoPage = () => {
       <div className="bg-primary text-primary-foreground pt-20">
         <div className="container mx-auto px-6 max-w-[1400px] py-4">
           <h1 className="text-lg font-semibold text-primary-foreground">Interactive Demo</h1>
-          <p className="text-sm text-primary-foreground/60 mt-1">Select a clinical scenario to see the pipeline in action</p>
+          <p className="text-sm text-primary-foreground/60 mt-1">
+            Each scenario loads a WAV from <code className="text-xs opacity-90">public/demo-audio/</code> and runs{" "}
+            <code className="text-xs opacity-90">POST /transcribe</code>
+          </p>
         </div>
       </div>
 
       <div className="container mx-auto px-6 max-w-[1400px] py-8">
-        {/* Scenario Buttons */}
+        <p className="text-xs text-muted-foreground mb-4">
+          API: {import.meta.env.VITE_API_URL || "(set VITE_API_URL in frontend/.env)"}
+        </p>
+
+        {errorMessage && (
+          <div className="mb-6 rounded-lg border border-signal-red/40 bg-signal-red/10 px-4 py-3 text-sm text-signal-red">
+            {errorMessage}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
           {SCENARIOS.map((s) => {
             const Icon = s.icon;
@@ -66,7 +79,7 @@ const DemoPage = () => {
             return (
               <button
                 key={s.id}
-                onClick={() => !isProcessing && simulateProcess(s.id)}
+                onClick={() => !isProcessing && void runScenario(s)}
                 disabled={isProcessing}
                 className={`text-left rounded-lg border p-4 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                   isActive
@@ -87,30 +100,10 @@ const DemoPage = () => {
           })}
         </div>
 
-        {/* Pipeline Status Bar */}
-        {isProcessing && (
-          <div className="mb-8">
-            <div className="bg-card rounded-lg shadow-card p-4">
-              <div className="flex items-center gap-2">
-                {PIPELINE_STAGES.map((ps, i) => {
-                  const stageIndex = PIPELINE_STAGES.findIndex(s => s.key === stage);
-                  const isActive = i === stageIndex;
-                  const isDone = i < stageIndex;
-                  return (
-                    <div key={ps.key} className="flex items-center gap-2 flex-1">
-                      <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all w-full ${
-                        isActive ? "bg-accent/15 text-accent" : isDone ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
-                      }`}>
-                        {isActive && <div className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin shrink-0" />}
-                        {isDone && <CheckCircle className="h-3 w-3 shrink-0" />}
-                        <span className="truncate">{ps.label}</span>
-                      </div>
-                      {i < PIPELINE_STAGES.length - 1 && <span className="text-muted-foreground text-xs">→</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+        {stage === "uploading" && (
+          <div className="mb-8 bg-card rounded-lg shadow-card p-4 flex items-center gap-3">
+            <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin shrink-0" />
+            <p className="text-sm text-foreground">Running the full pipeline on the server…</p>
           </div>
         )}
 
@@ -139,7 +132,7 @@ const DemoPage = () => {
         {stage === "idle" && (
           <div className="text-center py-16 text-muted-foreground">
             <Stethoscope className="h-10 w-10 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Pick a scenario above to run the pipeline</p>
+            <p className="text-sm">Pick a scenario to load its WAV and run the live pipeline</p>
           </div>
         )}
       </div>

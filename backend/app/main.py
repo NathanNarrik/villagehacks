@@ -43,7 +43,9 @@ app = FastAPI(title="CareCaller AI Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_ORIGIN, "http://localhost:3000"],
+    allow_origins=[settings.FRONTEND_ORIGIN],
+    # Any localhost / loopback port (Vite may use 8081+ if 8080 is busy).
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
