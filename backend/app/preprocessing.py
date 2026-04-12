@@ -4,6 +4,16 @@ OWNED BY PERSON A. See HANDOFF_PERSON_A.md for the full spec.
 """
 from __future__ import annotations
 
+import asyncio
+import uuid
+from pathlib import Path
+from tempfile import gettempdir
+
+try:
+    from audio_preprocess.pipeline import preprocess_for_scribe
+except Exception:  # pragma: no cover - fallback import style for alternate runners
+    from backend.audio_preprocess.pipeline import preprocess_for_scribe  # type: ignore[no-redef]
+
 
 async def preprocess(input_path: str) -> str:
     """Run loudnorm → afftdn → 16kHz mono PCM WAV. Return path to cleaned WAV.
@@ -16,4 +26,14 @@ async def preprocess(input_path: str) -> str:
     Use asyncio.create_subprocess_exec so the event loop stays responsive.
     Raise an exception (any) on non-zero exit — the pipeline route turns it into a 500.
     """
-    raise NotImplementedError("preprocessing.preprocess — Person A: see HANDOFF_PERSON_A.md")
+    working_dir = Path(gettempdir()) / "carecaller_preprocessed"
+    working_dir.mkdir(parents=True, exist_ok=True)
+
+    result = await asyncio.to_thread(
+        preprocess_for_scribe,
+        input_path=input_path,
+        output_dir=working_dir,
+        job_id=f"call_{uuid.uuid4().hex[:10]}",
+        timeout_s=120,
+    )
+    return str(result.output_path)

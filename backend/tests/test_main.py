@@ -214,3 +214,5 @@ def test_health_returns_in_memory(monkeypatch):
     assert body["status"] == "ok"
     assert body["redis"] == "in-memory"
     assert "scribe" in body
+    assert "learning_loop" in body
+    assert "realtime" in body

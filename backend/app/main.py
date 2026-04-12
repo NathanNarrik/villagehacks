@@ -1,14 +1,12 @@
 """FastAPI entry point for the CareCaller AI backend.
 
-Three routes match the frozen frontend contract in `frontend/src/services/api.ts`:
+Primary routes match the frozen frontend contract in `frontend/src/services/api.ts`:
 
     POST /transcribe   — accepts an audio UploadFile, runs the 7-layer pipeline
+    GET  /stream/token — single-use token for websocket auth
+    WS   /stream       — realtime relay + correction events
     GET  /benchmark    — returns the cached benchmark JSON Person A produces
     GET  /health       — reachability check for Tavily, Claude, and the (in-memory) store
-
-Person A's modules raise NotImplementedError until they're wired up. We catch that
-in `/transcribe` and return a clean 501 with the missing module name so debugging
-is obvious.
 """
 from __future__ import annotations
 
@@ -22,13 +20,13 @@ from tempfile import NamedTemporaryFile
 from typing import Literal
 
 from anthropic import AsyncAnthropic
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from tavily import TavilyClient
 
-from . import pipeline
+from . import learning_loop, pipeline, realtime
 from .config import settings
-from .schemas import BenchmarkResponse, HealthResponse, TranscribeResponse
+from .schemas import BenchmarkResponse, HealthResponse, StreamToken, TranscribeResponse
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -50,6 +48,142 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# GET /stream/token
+# ---------------------------------------------------------------------------
+@app.get("/stream/token", response_model=StreamToken)
+async def stream_token() -> StreamToken:
+    if not settings.elevenlabs_api_key():
+        raise HTTPException(status_code=503, detail="ELEVENLABS_API_KEY is not configured")
+    return StreamToken(**realtime.issue_stream_token())
+
+
+# ---------------------------------------------------------------------------
+# WS /stream
+# ---------------------------------------------------------------------------
+@app.websocket("/stream")
+async def stream(websocket: WebSocket) -> None:
+    await websocket.accept()
+    token = websocket.query_params.get("token", "")
+    if not realtime.consume_stream_token(token):
+        await websocket.send_json(
+            {"type": "error", "stage": "auth", "message": "Invalid or expired stream token"}
+        )
+        await websocket.close(code=4401)
+        return
+
+    upstream = realtime.ScribeRealtimeClient(
+        api_key=settings.elevenlabs_api_key(),
+        model_id=settings.SCRIBE_REALTIME_MODEL_ID,
+    )
+    try:
+        await upstream.connect()
+    except Exception as exc:  # noqa: BLE001
+        await websocket.send_json(
+            {
+                "type": "error",
+                "stage": "scribe_realtime",
+                "message": f"Failed to connect realtime upstream: {exc}",
+            }
+        )
+        await websocket.close(code=1011)
+        return
+
+    async def _client_to_upstream() -> None:
+        while True:
+            msg = await websocket.receive()
+            msg_type = msg.get("type")
+            if msg_type == "websocket.disconnect":
+                raise WebSocketDisconnect()
+
+            chunk = msg.get("bytes")
+            if isinstance(chunk, (bytes, bytearray)):
+                await upstream.send_audio_chunk(bytes(chunk), commit=False)
+                continue
+
+            text = msg.get("text")
+            if isinstance(text, str) and text:
+                try:
+                    payload = json.loads(text)
+                except json.JSONDecodeError:
+                    payload = {}
+                if payload.get("type") == "commit" or payload.get("commit") is True:
+                    await upstream.commit()
+
+    async def _upstream_to_client() -> None:
+        while True:
+            event = await upstream.recv()
+            message_type = str(event.get("message_type", "")).lower()
+
+            if message_type == "session_started":
+                continue
+
+            if message_type == "partial_transcript":
+                await websocket.send_json(
+                    {
+                        "type": "partial",
+                        "text": str(event.get("text", "")),
+                        "words": realtime.frontend_words_from_realtime_event(event),
+                    }
+                )
+                continue
+
+            if message_type in {"committed_transcript", "committed_transcript_with_timestamps"}:
+                committed_payload = {
+                    "type": "committed",
+                    "text": str(event.get("text", "")),
+                    "words": realtime.frontend_words_from_realtime_event(event),
+                }
+                await websocket.send_json(committed_payload)
+
+                scribe_words = realtime.scribe_words_from_realtime_event(event)
+                if not scribe_words:
+                    continue
+                try:
+                    corrected = await pipeline.run_pipeline_from_scribe_words(scribe_words)
+                    await websocket.send_json(
+                        {
+                            "type": "correction",
+                            "payload": corrected.model_dump(),
+                        }
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("Realtime correction pipeline failed: %s", exc)
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "stage": "pipeline",
+                            "message": f"Realtime correction failed: {exc}",
+                        }
+                    )
+                continue
+
+            if "error" in message_type:
+                await websocket.send_json(realtime.realtime_error_payload(event))
+                continue
+
+    tasks = [asyncio.create_task(_client_to_upstream()), asyncio.create_task(_upstream_to_client())]
+    try:
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+        for task in pending:
+            task.cancel()
+        for task in done:
+            exc = task.exception()
+            if exc and not isinstance(exc, WebSocketDisconnect):
+                raise exc
+    except WebSocketDisconnect:
+        pass
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await upstream.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -181,4 +315,9 @@ async def health() -> HealthResponse:
         scribe=_scribe_status(),
         tavily=tavily_status,
         claude=claude_status,
+        learning_loop={
+            "keyterm_count": learning_loop.keyterm_count(),
+            "phonetic_map_size": learning_loop.phonetic_map_size(),
+        },
+        realtime=realtime.realtime_dependency_status(),
     )
