@@ -154,11 +154,14 @@ def build_ffmpeg_command(
     ffmpeg_bin: str,
     filter_chain: str = FILTER_CHAIN,
 ) -> list[str]:
+    # FFmpeg accepts forward slashes on all platforms; Path(str) on Windows uses "\" otherwise.
+    in_s = input_path.as_posix()
+    out_s = output_path.as_posix()
     return [
         ffmpeg_bin,
         "-y",
         "-i",
-        str(input_path),
+        in_s,
         "-af",
         filter_chain,
         "-ac",
@@ -167,7 +170,7 @@ def build_ffmpeg_command(
         str(TARGET_SAMPLE_RATE),
         "-c:a",
         TARGET_CODEC,
-        str(output_path),
+        out_s,
     ]
 
 

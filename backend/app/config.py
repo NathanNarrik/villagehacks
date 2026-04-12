@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     CLAUDE_MODEL: str = "claude-sonnet-4-5"
     TAVILY_CALL_CAP: int = 5
     TAVILY_CACHE_TTL_SEC: int = 3600
-    FRONTEND_ORIGIN: str = "http://localhost:5173"
+    FRONTEND_ORIGIN: str = "http://localhost:8080"
 
     BENCHMARK_RESULTS_PATH: Path = BACKEND_DIR / "data" / "benchmark_results.json"
 

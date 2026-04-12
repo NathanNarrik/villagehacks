@@ -2,6 +2,23 @@ import type { TranscribeResponse, StreamToken, BenchmarkResponse, HealthResponse
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
+async function readErrorMessage(res: Response): Promise<string> {
+  try {
+    const data: unknown = await res.json();
+    if (data && typeof data === "object" && "detail" in data) {
+      const d = (data as { detail: unknown }).detail;
+      if (typeof d === "string") return d;
+      if (Array.isArray(d))
+        return d
+          .map((x) => (typeof x === "object" && x && "msg" in x ? String((x as { msg: unknown }).msg) : String(x)))
+          .join("; ");
+    }
+  } catch {
+    /* ignore */
+  }
+  return res.statusText || `HTTP ${res.status}`;
+}
+
 /**
  * POST /transcribe — upload audio file, get full pipeline result
  */
@@ -14,7 +31,7 @@ export async function transcribeAudio(file: File): Promise<TranscribeResponse> {
     body: formData,
   });
 
-  if (!res.ok) throw new Error(`Transcription failed: ${res.statusText}`);
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
 
@@ -23,7 +40,7 @@ export async function transcribeAudio(file: File): Promise<TranscribeResponse> {
  */
 export async function getStreamToken(): Promise<StreamToken> {
   const res = await fetch(`${API_URL}/stream/token`);
-  if (!res.ok) throw new Error(`Failed to get stream token: ${res.statusText}`);
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
 
@@ -32,7 +49,7 @@ export async function getStreamToken(): Promise<StreamToken> {
  */
 export async function fetchBenchmark(filter: "all" | "adversarial" | "standard" = "all"): Promise<BenchmarkResponse> {
   const res = await fetch(`${API_URL}/benchmark?clips=${filter}`);
-  if (!res.ok) throw new Error(`Benchmark fetch failed: ${res.statusText}`);
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
 
@@ -41,7 +58,7 @@ export async function fetchBenchmark(filter: "all" | "adversarial" | "standard" 
  */
 export async function checkHealth(): Promise<HealthResponse> {
   const res = await fetch(`${API_URL}/health`);
-  if (!res.ok) throw new Error(`Health check failed: ${res.statusText}`);
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
 
