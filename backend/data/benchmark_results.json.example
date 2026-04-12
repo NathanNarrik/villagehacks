@@ -1,0 +1,80 @@
+{
+  "results": [
+    {
+      "clip_id": "std_001",
+      "category": "Cardiovascular",
+      "difficulty": "Standard",
+      "raw_wer": 0.082,
+      "corrected_wer": 0.018,
+      "improvement_pct": 78.0
+    },
+    {
+      "clip_id": "std_002",
+      "category": "Diabetes",
+      "difficulty": "Standard",
+      "raw_wer": 0.071,
+      "corrected_wer": 0.015,
+      "improvement_pct": 78.9
+    },
+    {
+      "clip_id": "adv_001",
+      "category": "Cardiovascular",
+      "difficulty": "Adversarial",
+      "raw_wer": 0.213,
+      "corrected_wer": 0.041,
+      "improvement_pct": 80.8
+    },
+    {
+      "clip_id": "adv_002",
+      "category": "Antibiotics",
+      "difficulty": "Adversarial",
+      "raw_wer": 0.198,
+      "corrected_wer": 0.052,
+      "improvement_pct": 73.7
+    }
+  ],
+  "ablation": [
+    {
+      "stage": "Scribe v2 baseline",
+      "wer": 0.141,
+      "delta": 0.0,
+      "description": "ElevenLabs Scribe v2 raw output, no keyterms"
+    },
+    {
+      "stage": "+ Keyterms",
+      "wer": 0.092,
+      "delta": -0.049,
+      "description": "Inject 100 most-frequent learned medical terms"
+    },
+    {
+      "stage": "+ Uncertainty gating",
+      "wer": 0.078,
+      "delta": -0.014,
+      "description": "Multi-signal LOW/MED/HIGH bucketing"
+    },
+    {
+      "stage": "+ Tavily verification",
+      "wer": 0.041,
+      "delta": -0.037,
+      "description": "Confidence-gated medical lookup"
+    },
+    {
+      "stage": "+ Claude correction",
+      "wer": 0.032,
+      "delta": -0.009,
+      "description": "Safe correction with hallucination guard"
+    }
+  ],
+  "metrics": {
+    "verification_rate": 0.94,
+    "unsafe_guess_rate": 0.0,
+    "uncertainty_coverage": 0.88,
+    "phonetic_hit_rate": 0.71
+  },
+  "aggregate": {
+    "avg_raw_wer": 0.141,
+    "avg_corrected_wer": 0.032,
+    "avg_improvement_pct": 77.3,
+    "keyterm_impact_pct": 34.8
+  }
+}

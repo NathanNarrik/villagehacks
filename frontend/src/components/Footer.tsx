@@ -6,7 +6,7 @@ const Footer = () => (
       <div className="flex flex-col md:flex-row items-center justify-between gap-6">
         <div>
           <p className="text-lg font-bold">
-            CareCaller <span className="text-accent">AI</span>
+            Scribe<span className="text-accent">Shield</span>
           </p>
           <p className="text-sm text-primary-foreground/70 mt-1">
             Verification-Augmented Speech-to-Text

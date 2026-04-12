@@ -7,10 +7,17 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Node / frontend
 node_modules
+frontend/node_modules
 dist
 dist-ssr
 *.local
+frontend/.env
+
+# Environment / secrets
+.env
+backend/.env
 
 # Editor directories and files
 .vscode/*
@@ -23,10 +30,20 @@ dist-ssr
 *.sln
 *.sw?
 
-.env
+# Reference docs
+*.pdf
 
-# Python caches
+# Python backend
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
 __pycache__/
 *.py[cod]
 
+# Backend data artifacts
+backend/data/clips/
+backend/data/benchmark_results.json
+
+# Audio artifacts
 *.wav

@@ -3,8 +3,31 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Ensure imports like `backend.audio_preprocess...` work regardless of
-# running pytest from repo root or from the backend/ directory.
+import pytest
+
+# Ensure imports work whether pytest is run from repo root or backend/
+# - `app.*` imports require backend/ on sys.path
+# - `backend.*` imports require repo root on sys.path
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+
+for path in (BACKEND_ROOT, REPO_ROOT):
+    path_str = str(path)
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)
+
+from app.claude_correct import reset_corrector
+from app.storage import store
+from app.tavily_verify import reset_verifier
+
+
+@pytest.fixture(autouse=True)
+def _reset_state():
+    """Reset in-memory services between tests."""
+    store.reset()
+    reset_verifier()
+    reset_corrector()
+    yield
+    store.reset()
+    reset_verifier()
+    reset_corrector()

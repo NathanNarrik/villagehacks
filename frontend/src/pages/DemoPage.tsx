@@ -1,34 +1,37 @@
-import { useState, useCallback, useRef } from "react";
-import { Upload, Mic, Square, FileAudio, CheckCircle, AlertTriangle, HelpCircle, Download, X } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Stethoscope, Pill, Syringe, AlertTriangle, Activity, CheckCircle, HelpCircle, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { MOCK_TRANSCRIBE, DEMO_CLIPS } from "@/services/mockData";
+import { MOCK_TRANSCRIBE } from "@/services/mockData";
 import type { TranscribeResponse, ProcessingStage, RawWord, CorrectedWord } from "@/types/api";
 
 const PIPELINE_STAGES: { key: ProcessingStage; label: string }[] = [
   { key: "preprocessing", label: "Preprocessing" },
-  { key: "scribe", label: "Scribe v2 Transcribing" },
-  { key: "uncertainty", label: "Detecting Uncertainty" },
-  { key: "tavily", label: "Verifying with Tavily" },
+  { key: "scribe", label: "Scribe v2" },
+  { key: "uncertainty", label: "Uncertainty" },
+  { key: "tavily", label: "Tavily Verify" },
   { key: "claude", label: "Correcting" },
+];
+
+const SCENARIOS = [
+  { id: "med-refill", label: "Medication Refill", description: "Patient calling to refill metformin and lisinopril prescriptions", icon: Pill, category: "Standard" },
+  { id: "post-op", label: "Post-Op Follow-up", description: "Surgeon reviewing recovery progress after knee replacement", icon: Syringe, category: "Standard" },
+  { id: "symptom-check", label: "New Symptom Report", description: "Patient describing new headaches and dizziness symptoms", icon: Stethoscope, category: "Standard" },
+  { id: "allergy-review", label: "Allergy Review", description: "Nurse confirming drug allergies before administering new prescription", icon: Stethoscope, category: "Standard" },
+  { id: "adversarial-accent", label: "Heavy Accent + Noise", description: "Thick accent over speakerphone with background TV audio", icon: AlertTriangle, category: "Adversarial" },
+  { id: "rapid-meds", label: "Rapid Med List", description: "Doctor rattling off 6 medications in under 15 seconds", icon: Activity, category: "Adversarial" },
 ];
 
 const DemoPage = () => {
   const [result, setResult] = useState<TranscribeResponse | null>(null);
   const [stage, setStage] = useState<ProcessingStage>("idle");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordTime, setRecordTime] = useState(0);
-  const [showClipsModal, setShowClipsModal] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval>>();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeScenario, setActiveScenario] = useState<string | null>(null);
 
-  const simulateProcess = useCallback(() => {
+  const simulateProcess = useCallback((scenarioId: string) => {
+    setActiveScenario(scenarioId);
     setResult(null);
     setStage("preprocessing");
     setTimeout(() => setStage("scribe"), 500);
@@ -41,138 +44,48 @@ const DemoPage = () => {
     }, 3200);
   }, []);
 
-  const handleFileSelect = (file: File) => {
-    const validTypes = ["audio/wav", "audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/mp3"];
-    if (!validTypes.some(t => file.type.includes(t.split("/")[1]))) {
-      alert("Please upload WAV, MP3, or M4A files only.");
-      return;
-    }
-    setSelectedFile(file);
-    setResult(null);
-    setStage("idle");
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    if (e.dataTransfer.files[0]) handleFileSelect(e.dataTransfer.files[0]);
-  };
-
-  const handleRecord = () => {
-    if (isRecording) {
-      setIsRecording(false);
-      clearInterval(timerRef.current);
-      simulateProcess();
-    } else {
-      setIsRecording(true);
-      setRecordTime(0);
-      setResult(null);
-      setStage("idle");
-      timerRef.current = setInterval(() => setRecordTime(t => t + 1), 1000);
-    }
-  };
-
-  const handleClipSelect = (_clipId: string) => {
-    setShowClipsModal(false);
-    setSelectedFile(null);
-    setStage("idle");
-    simulateProcess();
-  };
-
   const isProcessing = stage !== "idle" && stage !== "done" && stage !== "error";
 
   return (
     <div className="min-h-screen bg-secondary">
       <Navbar />
 
-      {/* Header bar */}
       <div className="bg-primary text-primary-foreground pt-20">
-        <div className="container mx-auto px-6 max-w-[1400px] py-4 flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-xl font-bold text-primary-foreground">CareCaller AI Demo</h1>
-          <div className="flex items-center gap-3 flex-wrap">
-            <Badge className="bg-accent text-accent-foreground rounded-pill px-4 py-1 text-sm font-semibold">
-              37% fewer errors
-            </Badge>
-            <Badge className="bg-success text-success-foreground rounded-pill px-3 py-1 text-xs font-semibold">
-              Verification Rate 100%
-            </Badge>
-            <Badge className="bg-accent text-accent-foreground rounded-pill px-3 py-1 text-xs font-semibold">
-              Unsafe Guess Rate 0%
-            </Badge>
-          </div>
-          <Button className="border border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 rounded-pill text-sm"
-            onClick={() => setShowClipsModal(true)}>
-            Demo Clips
-          </Button>
+        <div className="container mx-auto px-6 max-w-[1400px] py-4">
+          <h1 className="text-lg font-semibold text-primary-foreground">Interactive Demo</h1>
+          <p className="text-sm text-primary-foreground/60 mt-1">Select a clinical scenario to see the pipeline in action</p>
         </div>
       </div>
 
       <div className="container mx-auto px-6 max-w-[1400px] py-8">
-        {/* Input Area */}
-        <Tabs defaultValue="upload" className="mb-8">
-          <TabsList className="bg-card shadow-card">
-            <TabsTrigger value="upload" className="gap-2"><Upload className="h-4 w-4" /> Upload File</TabsTrigger>
-            <TabsTrigger value="record" className="gap-2"><Mic className="h-4 w-4" /> Record Live</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="upload">
-            <div
-              className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors cursor-pointer ${
-                dragOver ? "border-accent bg-accent/5" : "border-border bg-card"
-              }`}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input ref={fileInputRef} type="file" accept="audio/*" className="hidden"
-                onChange={e => e.target.files?.[0] && handleFileSelect(e.target.files[0])} />
-              <FileAudio className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              {selectedFile ? (
-                <p className="text-foreground font-medium">{selectedFile.name}</p>
-              ) : (
-                <p className="text-muted-foreground">Drop a call recording here or click to browse<br />
-                  <span className="text-sm">WAV, MP3, M4A</span>
-                </p>
-              )}
-            </div>
-            {selectedFile && (
-              <Button className="mt-4 bg-accent text-accent-foreground hover:bg-accent/90 rounded-pill px-8"
-                onClick={simulateProcess} disabled={isProcessing}>
-                Process Call
-              </Button>
-            )}
-          </TabsContent>
-
-          <TabsContent value="record">
-            <div className="bg-card rounded-lg p-12 text-center shadow-card">
-              <div className="relative inline-block">
-                {isRecording && (
-                  <div className="absolute inset-0 rounded-full bg-signal-red/30 animate-pulse-ring" />
+        {/* Scenario Buttons */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
+          {SCENARIOS.map((s) => {
+            const Icon = s.icon;
+            const isActive = activeScenario === s.id;
+            return (
+              <button
+                key={s.id}
+                onClick={() => !isProcessing && simulateProcess(s.id)}
+                disabled={isProcessing}
+                className={`text-left rounded-lg border p-4 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isActive
+                    ? "border-accent bg-accent/5 shadow-card"
+                    : "border-border bg-card hover:border-accent/50 hover:shadow-card"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-accent" : "text-muted-foreground"}`} />
+                  <span className="text-sm font-medium text-foreground">{s.label}</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{s.description}</p>
+                {s.category === "Adversarial" && (
+                  <Badge className="mt-2 text-[10px] bg-signal-red/10 text-signal-red border-0">Adversarial</Badge>
                 )}
-                <button
-                  onClick={handleRecord}
-                  className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-colors ${
-                    isRecording ? "bg-signal-red" : "bg-accent hover:bg-accent/90"
-                  }`}
-                >
-                  {isRecording ? <Square className="h-8 w-8 text-accent-foreground" /> : <Mic className="h-8 w-8 text-accent-foreground" />}
-                </button>
-              </div>
-              <p className="mt-4 text-muted-foreground">
-                {isRecording
-                  ? `Recording... ${Math.floor(recordTime / 60)}:${(recordTime % 60).toString().padStart(2, "0")}`
-                  : "Click to start recording"}
-              </p>
-              {isRecording && (
-                <Button className="mt-4 bg-signal-red text-accent-foreground hover:bg-signal-red/90 rounded-pill"
-                  onClick={handleRecord}>
-                  Stop & Process
-                </Button>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+              </button>
+            );
+          })}
+        </div>
 
         {/* Pipeline Status Bar */}
         {isProcessing && (
@@ -221,38 +134,15 @@ const DemoPage = () => {
             />
           </div>
         )}
-      </div>
 
-      {/* Demo Clips Modal */}
-      {showClipsModal && (
-        <div className="fixed inset-0 z-50 bg-foreground/50 flex items-center justify-center p-4"
-          onClick={() => setShowClipsModal(false)}>
-          <div className="bg-background rounded-lg max-w-4xl w-full max-h-[80vh] overflow-auto p-6 shadow-hover"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-foreground">Demo Clips</h2>
-              <button onClick={() => setShowClipsModal(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {DEMO_CLIPS.map(clip => (
-                <button key={clip.id}
-                  className="text-left bg-card rounded-lg p-4 border hover:border-accent hover:shadow-card transition-all"
-                  onClick={() => handleClipSelect(clip.id)}>
-                  <p className="font-medium text-sm text-foreground">{clip.name}</p>
-                  <div className="flex gap-2 mt-2">
-                    <Badge variant="secondary" className="text-xs">{clip.category}</Badge>
-                    <Badge className={`text-xs ${clip.difficulty === "Adversarial" ? "bg-signal-red text-accent-foreground" : "bg-muted text-muted-foreground"}`}>
-                      {clip.difficulty}
-                    </Badge>
-                  </div>
-                </button>
-              ))}
-            </div>
+        {/* Empty state */}
+        {stage === "idle" && (
+          <div className="text-center py-16 text-muted-foreground">
+            <Stethoscope className="h-10 w-10 mx-auto mb-3 opacity-40" />
+            <p className="text-sm">Pick a scenario above to run the pipeline</p>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <Footer />
     </div>
