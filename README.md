@@ -270,6 +270,9 @@ python backend/scripts/run_benchmark.py --run-pipeline
 
 This runs the pipeline against the benchmark audio, writes eval rows, and regenerates the JSON consumed by the frontend.
 
+### Learning-Loop Visuals
+
+The `/benchmark` page also requests `GET /learning-loop`. That endpoint returns persisted XGBoost training history, retraining snapshots, and feature importance if the corresponding artifacts exist. If they have not been generated yet, the endpoint returns `503`.
 ## API Surface
 
 | Method | Path | Purpose |
@@ -368,6 +371,9 @@ Regenerate the benchmark artifact:
 python backend/scripts/run_benchmark.py --run-pipeline
 ```
 
+### Learning-loop panel is unavailable
+
+That usually means the XGBoost reporting artifacts have not been generated yet. The rest of the app can still function without them.
 ## What Makes This Repo Interesting
 
 This is not just a transcription wrapper. The more interesting design choice is the safety posture:
