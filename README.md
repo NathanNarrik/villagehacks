@@ -1,6 +1,6 @@
-# CareCaller AI
+# ScribeShield AI
 
-CareCaller AI is a healthcare speech-intelligence project for **high-risk phone call transcription**. It combines telephony-aware STT, uncertainty scoring, live medical-term verification, safe correction, and structured clinical extraction so a transcript is not just readable, but trustworthy enough to review.
+ScribeShield AI is a healthcare speech-intelligence project for **high-risk phone call transcription**. It combines telephony-aware STT, uncertainty scoring, live medical-term verification, safe correction, and structured clinical extraction so a transcript is not just readable, but trustworthy enough to review.
 
 This repository contains the full stack:
 
@@ -21,7 +21,7 @@ Healthcare calls are where generic speech-to-text systems fail in the most dange
 - **Speech varies widely**: accents, age, speed, and clinical handoff speech make benchmark-clean audio assumptions break down fast.
 - **Plain transcripts hide uncertainty**: the biggest issue is not only being wrong, but looking confident while wrong.
 
-The core idea behind CareCaller AI is simple: if the system is uncertain, it should **surface that uncertainty, verify what it can, avoid unsafe guesses, and extract clinically useful structure only after correction**.
+The core idea behind ScribeShield AI is simple: if the system is uncertain, it should **surface that uncertainty, verify what it can, avoid unsafe guesses, and extract clinically useful structure only after correction**.
 
 ## What The App Does
 
@@ -40,7 +40,7 @@ The frontend exposes three main experiences:
 
 ## Problem Statement, In Product Terms
 
-The project brief for CareCaller AI focused on a real and important gap: **speech systems that work on clean demo audio often break on actual healthcare phone calls**. In this repo, that problem statement translates into a few design choices:
+The project brief for ScribeShield AI focused on a real and important gap: **speech systems that work on clean demo audio often break on actual healthcare phone calls**. In this repo, that problem statement translates into a few design choices:
 
 - low-confidence medical-looking words are treated as higher risk than ordinary words
 - corrections are constrained by external verification instead of pure model rewriting
