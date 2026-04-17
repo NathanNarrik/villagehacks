@@ -16,7 +16,7 @@ dist-ssr
 frontend/.env
 
 # Environment / secrets
-.env
+frontend/.env
 backend/.env
 
 # Editor directories and files
